@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="128" fill="#0A0A0A"/>
+  <rect width="512" height="512" rx="128" fill="url(#grad)" opacity="0.15"/>
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#D1FF00"/>
+      <stop offset="100%" stop-color="#10B981"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(256, 256) rotate(-45) translate(-256, -256)" stroke="#D1FF00" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Center bar -->
+    <line x1="160" y1="256" x2="352" y2="256" stroke-width="28"/>
+    <!-- Left Inner Weights -->
+    <rect x="130" y="176" width="30" height="160" rx="10" fill="#D1FF00"/>
+    <rect x="90" y="196" width="30" height="120" rx="8" fill="#D1FF00"/>
+    <!-- Right Inner Weights -->
+    <rect x="352" y="176" width="30" height="160" rx="10" fill="#D1FF00"/>
+    <rect x="392" y="196" width="30" height="120" rx="8" fill="#D1FF00"/>
+    <!-- Outer grip stops -->
+    <rect x="160" y="236" width="12" height="40" rx="4" fill="#D1FF00"/>
+    <rect x="340" y="236" width="12" height="40" rx="4" fill="#D1FF00"/>
+  </g>
+</svg>
