@@ -1,0 +1,6 @@
+{
+  "name": "اپلیکیشن مدیریت تمرینات ورزشی",
+  "description": "برنامه هوشمند ثبت تمرینات ورزشی، آفلاین و قابل نصب (PWA)، رهگیری وزنه و تکرارها، نمایش گیف حرکات و نمودارهای پیشرفت",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
