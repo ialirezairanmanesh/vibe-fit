@@ -1,0 +1,50 @@
+---
+description: User data persistence — browser storage, server JSON files, Docker volume, and gitignore rules
+alwaysApply: true
+---
+
+# User Data Storage
+
+## Layers
+
+| Layer | Location | What |
+| --- | --- | --- |
+| Server (primary in prod) | `data/*.json` via `DATA_DIR` | Routines, sessions, active workout, chat |
+| IndexedDB | `IranFitnessDB` / `IranFitnessMediaCache` | App state + offline media cache |
+| localStorage | Browser | Fallback + `custom_ai_config` (server not synced yet) |
+
+## Server files (never commit)
+
+```
+data/
+├── fa_workout_routines_v1.json
+├── fa_workout_sessions_v1.json
+├── fa_active_workout_session_v1.json
+├── fa_workout_chat_history_v1.json
+└── fa_workout_chat_sessions_v2.json
+```
+
+- `.gitignore`: `data/*` with `!data/.gitkeep` (local dev only)
+- Production volume: named `vibe_fit_data` → `/app/data` in `docker-compose.production.yml`
+- Env: `DATA_DIR=/app/data` (default `./data` locally)
+
+## Code map
+
+| Concern | File |
+| --- | --- |
+| Browser read/write | `src/utils/dbStorage.ts` |
+| Debounced server sync | `src/utils/serverSync.ts` |
+| REST API | `server.ts` → `GET/PUT /api/storage/:key` |
+| Allowed keys whitelist | `STORAGE_KEYS` in `server.ts`, `ALLOWED_KEYS` in `serverSync.ts` |
+
+## Rules when changing persistence
+
+1. **New persisted field** — add key to both whitelists, wire through `dbStorage.ts` (load server → IndexedDB → localStorage; save all + `scheduleServerSync`).
+2. **Never commit** runtime JSON under `data/`.
+3. **Always keep** Docker volume + `DATA_DIR` in sync when touching deploy config.
+4. **Do not** write user data elsewhere on disk without updating this rule and the skill.
+5. Active workout sync is debounced (10s); other keys 2s — avoid per-second server writes.
+
+## Load priority
+
+Server → IndexedDB → localStorage. After load, mirror into IndexedDB and schedule server sync (migrates legacy browser-only data).

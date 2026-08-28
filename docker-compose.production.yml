@@ -4,6 +4,7 @@ x-vibe-fit-env: &vibe_fit_env
   NODE_ENV: production
   PORT: "3000"
   APP_URL: https://vibefit.fidadev.ir
+  DATA_DIR: /app/data
   GEMINI_API_KEY: ${GEMINI_API_KEY}
   MUSCLEWIKI_API_KEY: ${MUSCLEWIKI_API_KEY}
 
@@ -14,6 +15,8 @@ services:
     restart: unless-stopped
     environment:
       <<: *vibe_fit_env
+    volumes:
+      - vibe_fit_data:/app/data
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3000/api/health || exit 1"]
       interval: 30s
@@ -43,3 +46,6 @@ services:
 networks:
   factor_traefik_network:
     external: true
+
+volumes:
+  vibe_fit_data:
