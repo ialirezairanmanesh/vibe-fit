@@ -1,0 +1,45 @@
+name: "factor-vibe-fit"
+
+x-vibe-fit-env: &vibe_fit_env
+  NODE_ENV: production
+  PORT: "3000"
+  APP_URL: https://vibefit.fidadev.ir
+  GEMINI_API_KEY: ${GEMINI_API_KEY}
+  MUSCLEWIKI_API_KEY: ${MUSCLEWIKI_API_KEY}
+
+services:
+  vibe_fit_web:
+    image: docker.fidadev.ir/frontend/vibe-fit:stable
+    container_name: vibe_fit_web
+    restart: unless-stopped
+    environment:
+      <<: *vibe_fit_env
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - factor_traefik_network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=factor_traefik_network"
+      - "traefik.http.routers.factor_vibe_fit.rule=Host(`vibefit.fidadev.ir`)"
+      - "traefik.http.routers.factor_vibe_fit.entrypoints=websecure"
+      - "traefik.http.routers.factor_vibe_fit.middlewares=factor_vibe_fit-auth"
+      - "traefik.http.routers.factor_vibe_fit.service=factor_vibe_fit"
+      - "traefik.http.routers.factor_vibe_fit.tls.certresolver=myresolver"
+      - "traefik.http.routers.factor_vibe_fit.tls=true"
+      - "traefik.http.services.factor_vibe_fit.loadbalancer.server.port=3000"
+      - "traefik.http.services.factor_vibe_fit.loadbalancer.passhostheader=true"
+      - "traefik.http.middlewares.factor_vibe_fit-auth.basicauth.usersfile=/auth/.htpasswd"
+
+networks:
+  factor_traefik_network:
+    external: true

@@ -1,0 +1,47 @@
+image: docker.fidadev.ir/docker:27-cli-fixed
+
+variables:
+  DOCKER_HOST: unix:///var/run/docker.sock
+  DOCKER_DRIVER: overlay2
+  COMPOSE_DOCKER_CLI_BUILD: 1
+  DOCKER_BUILDKIT: 1
+  GIT_STRATEGY: fetch
+  GIT_DEPTH: 1
+  COMPOSE_PROD: docker-compose.production.yml
+  BASE_IMAGE: docker.fidadev.ir/frontend/vibe-fit-base:1.2.0
+  APP_IMAGE: docker.fidadev.ir/frontend/vibe-fit:stable
+
+before_script:
+  - echo "$REGISTRY_PASSWORD" | docker login -u "$REGISTRY_USERNAME" --password-stdin docker.fidadev.ir
+
+stages:
+  - build-base
+  - deploy
+
+build-base:
+  stage: build-base
+  script:
+    - docker build -t $BASE_IMAGE -f Dockerfile.base .
+    - docker push $BASE_IMAGE
+  tags:
+    - factor
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - Dockerfile.base
+        - package.json
+        - bun.lock
+      when: always
+
+deploy:
+  stage: deploy
+  script:
+    - docker pull $BASE_IMAGE
+    - docker build -t $APP_IMAGE .
+    - docker compose -f $COMPOSE_PROD up -d --force-recreate
+    - echo "✅ Production deployment completed!"
+  tags:
+    - factor
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: always
