@@ -5,6 +5,50 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import { MUSCLEWIKI_EXERCISES_DATABASE } from "./src/data/musclewikiDataset";
 
+const STORAGE_KEYS = new Set([
+  "fa_workout_routines_v1",
+  "fa_workout_sessions_v1",
+  "fa_active_workout_session_v1",
+  "fa_workout_chat_history_v1",
+  "fa_workout_chat_sessions_v2"
+]);
+
+function getDataDir(): string {
+  return process.env.DATA_DIR || path.join(process.cwd(), "data");
+}
+
+function ensureDataDir(): string {
+  const dataDir = getDataDir();
+  fs.mkdirSync(dataDir, { recursive: true });
+  return dataDir;
+}
+
+function storageFilePath(key: string): string {
+  return path.join(ensureDataDir(), `${key}.json`);
+}
+
+function readStorageValue(key: string): unknown | null {
+  const filePath = storageFilePath(key);
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    return parsed?.data ?? parsed;
+  } catch (err) {
+    console.error(`Failed to read storage file for ${key}:`, err);
+    return null;
+  }
+}
+
+function writeStorageValue(key: string, data: unknown): void {
+  const filePath = storageFilePath(key);
+  const tempPath = `${filePath}.tmp`;
+  fs.writeFileSync(tempPath, JSON.stringify({ data, updatedAt: new Date().toISOString() }, null, 2), "utf8");
+  fs.renameSync(tempPath, filePath);
+}
+
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -215,7 +259,45 @@ async function startServer() {
 
   // API Endpoint: Health check
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", geminiConfigured: !!process.env.GEMINI_API_KEY });
+    res.json({
+      status: "ok",
+      geminiConfigured: !!process.env.GEMINI_API_KEY,
+      dataDir: getDataDir()
+    });
+  });
+
+  // API Endpoint: Persistent user data storage (survives container restarts via DATA_DIR volume)
+  app.get("/api/storage/:key", (req, res) => {
+    const key = String(req.params.key || "");
+    if (!STORAGE_KEYS.has(key)) {
+      return res.status(400).json({ error: "Invalid storage key." });
+    }
+
+    const data = readStorageValue(key);
+    if (data === null) {
+      return res.status(404).json({ error: "No data found for this key." });
+    }
+
+    return res.json({ data });
+  });
+
+  app.put("/api/storage/:key", (req, res) => {
+    const key = String(req.params.key || "");
+    if (!STORAGE_KEYS.has(key)) {
+      return res.status(400).json({ error: "Invalid storage key." });
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(req.body, "data")) {
+      return res.status(400).json({ error: "Request body must include data." });
+    }
+
+    try {
+      writeStorageValue(key, req.body.data);
+      return res.json({ success: true });
+    } catch (err: any) {
+      console.error(`Failed to write storage file for ${key}:`, err);
+      return res.status(500).json({ error: err.message || "Failed to save data." });
+    }
   });
 
   // API Endpoint: Gemini AI Smart Workout Parser

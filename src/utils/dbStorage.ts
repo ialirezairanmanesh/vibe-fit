@@ -1,4 +1,5 @@
 import { RoutineDay, WorkoutSession, ActiveWorkoutState } from '../types';
+import { loadFromServer, scheduleServerSync } from './serverSync';
 
 const DB_NAME = 'IranFitnessDB';
 const DB_VERSION = 1;
@@ -272,6 +273,7 @@ export async function recoverAndMergeAllBrowserData(
 export async function saveRoutinesPersistent(routines: RoutineDay[]): Promise<void> {
   // Always update IndexedDB (handles large media files smoothly)
   await setItemDB(ROUTINES_KEY, routines);
+  scheduleServerSync(ROUTINES_KEY, routines);
 
   // Try updating localStorage as secondary fallback (ignoring quota errors)
   try {
@@ -283,6 +285,7 @@ export async function saveRoutinesPersistent(routines: RoutineDay[]): Promise<vo
 
 export async function saveSessionsPersistent(sessions: WorkoutSession[]): Promise<void> {
   await setItemDB(SESSIONS_KEY, sessions);
+  scheduleServerSync(SESSIONS_KEY, sessions);
   try {
     localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
   } catch (e) {
@@ -294,10 +297,22 @@ export async function loadDataPersistent(): Promise<{ routines: RoutineDay[] | n
   let routines: RoutineDay[] | null = null;
   let sessions: WorkoutSession[] | null = null;
 
+  // Prefer server storage when available (Docker volume)
+  try {
+    routines = await loadFromServer<RoutineDay[]>(ROUTINES_KEY);
+    sessions = await loadFromServer<WorkoutSession[]>(SESSIONS_KEY);
+  } catch (e) {
+    console.warn('Could not read from server storage, falling back to browser storage', e);
+  }
+
   // Try reading from IndexedDB first
   try {
-    routines = await getItemDB<RoutineDay[]>(ROUTINES_KEY);
-    sessions = await getItemDB<WorkoutSession[]>(SESSIONS_KEY);
+    if (!routines) {
+      routines = await getItemDB<RoutineDay[]>(ROUTINES_KEY);
+    }
+    if (!sessions) {
+      sessions = await getItemDB<WorkoutSession[]>(SESSIONS_KEY);
+    }
   } catch (e) {
     console.warn('Could not read from IndexedDB, falling back to localStorage', e);
   }
@@ -321,11 +336,21 @@ export async function loadDataPersistent(): Promise<{ routines: RoutineDay[] | n
     }
   }
 
+  if (routines) {
+    await setItemDB(ROUTINES_KEY, routines);
+    scheduleServerSync(ROUTINES_KEY, routines);
+  }
+  if (sessions) {
+    await setItemDB(SESSIONS_KEY, sessions);
+    scheduleServerSync(SESSIONS_KEY, sessions);
+  }
+
   return { routines, sessions };
 }
 
 export async function saveChatHistoryPersistent<T>(messages: T): Promise<void> {
   await setItemDB(CHAT_HISTORY_KEY, messages);
+  scheduleServerSync(CHAT_HISTORY_KEY, messages);
   try {
     localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(messages));
   } catch (e) {
@@ -336,7 +361,14 @@ export async function saveChatHistoryPersistent<T>(messages: T): Promise<void> {
 export async function loadChatHistoryPersistent<T>(): Promise<T | null> {
   let history: T | null = null;
   try {
-    history = await getItemDB<T>(CHAT_HISTORY_KEY);
+    history = await loadFromServer<T>(CHAT_HISTORY_KEY);
+  } catch (e) {
+    console.warn('Server chat history load error:', e);
+  }
+  try {
+    if (!history) {
+      history = await getItemDB<T>(CHAT_HISTORY_KEY);
+    }
   } catch (e) {
     console.warn('IndexedDB chat load error:', e);
   }
@@ -353,6 +385,7 @@ export async function loadChatHistoryPersistent<T>(): Promise<T | null> {
 
 export async function saveChatSessionsPersistent(sessions: ChatSession[]): Promise<void> {
   await setItemDB(CHAT_SESSIONS_KEY, sessions);
+  scheduleServerSync(CHAT_SESSIONS_KEY, sessions);
   try {
     localStorage.setItem(CHAT_SESSIONS_KEY, JSON.stringify(sessions));
   } catch (e) {
@@ -363,7 +396,14 @@ export async function saveChatSessionsPersistent(sessions: ChatSession[]): Promi
 export async function loadChatSessionsPersistent(): Promise<ChatSession[] | null> {
   let sessions: ChatSession[] | null = null;
   try {
-    sessions = await getItemDB<ChatSession[]>(CHAT_SESSIONS_KEY);
+    sessions = await loadFromServer<ChatSession[]>(CHAT_SESSIONS_KEY);
+  } catch (e) {
+    console.warn('Server chat sessions load error:', e);
+  }
+  try {
+    if (!sessions) {
+      sessions = await getItemDB<ChatSession[]>(CHAT_SESSIONS_KEY);
+    }
   } catch (e) {
     console.warn('IndexedDB sessions load error:', e);
   }
@@ -392,6 +432,7 @@ export async function clearChatHistoryPersistent(): Promise<void> {
 export async function saveActiveWorkoutPersistent(state: ActiveWorkoutState | null): Promise<void> {
   if (state === null) {
     await setItemDB(ACTIVE_WORKOUT_KEY, null);
+    scheduleServerSync(ACTIVE_WORKOUT_KEY, null);
     try {
       localStorage.removeItem(ACTIVE_WORKOUT_KEY);
     } catch (e) {
@@ -399,6 +440,7 @@ export async function saveActiveWorkoutPersistent(state: ActiveWorkoutState | nu
     }
   } else {
     await setItemDB(ACTIVE_WORKOUT_KEY, state);
+    scheduleServerSync(ACTIVE_WORKOUT_KEY, state);
     try {
       localStorage.setItem(ACTIVE_WORKOUT_KEY, JSON.stringify(state));
     } catch (e) {
@@ -410,7 +452,14 @@ export async function saveActiveWorkoutPersistent(state: ActiveWorkoutState | nu
 export async function loadActiveWorkoutPersistent(): Promise<ActiveWorkoutState | null> {
   let state: ActiveWorkoutState | null = null;
   try {
-    state = await getItemDB<ActiveWorkoutState>(ACTIVE_WORKOUT_KEY);
+    state = await loadFromServer<ActiveWorkoutState>(ACTIVE_WORKOUT_KEY);
+  } catch (e) {
+    console.warn('Server active workout load error:', e);
+  }
+  try {
+    if (!state) {
+      state = await getItemDB<ActiveWorkoutState>(ACTIVE_WORKOUT_KEY);
+    }
   } catch (e) {
     console.warn('IndexedDB active workout load error:', e);
   }
