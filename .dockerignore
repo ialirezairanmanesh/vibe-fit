@@ -1,0 +1,17 @@
+node_modules
+dist
+build
+coverage
+.git
+.gitlab-ci.yml
+README.md
+.vscode
+.editorconfig
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.env.local
+.env.*.local
+.DS_Store
+assets/.aistudio

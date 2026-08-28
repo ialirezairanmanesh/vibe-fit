@@ -1,0 +1,12 @@
+# Base image: Bun toolchain + installed dependencies only
+FROM oven/bun:1.2-alpine
+
+WORKDIR /app
+
+RUN apk add --no-cache wget
+
+COPY package.json bun.lock ./
+
+ENV CI=true
+
+RUN bun install --frozen-lockfile
