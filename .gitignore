@@ -4,6 +4,7 @@ dist/
 coverage/
 data/*
 !data/.gitkeep
+public/musclewiki-gifs/
 .DS_Store
 *.log
 .env*

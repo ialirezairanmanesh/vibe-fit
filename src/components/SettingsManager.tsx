@@ -1,6 +1,30 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { RoutineDay, WorkoutSession } from '../types';
-import { Settings, Download, Upload, RotateCcw, ShieldCheck, Database, FileText, Sparkles, HardDriveDownload, CheckCircle, RefreshCw, Key, Bot, Cpu, Check, AlertCircle, Save, Sliders } from 'lucide-react';
+import { RoutineDay, WorkoutSession, UserProfile } from '../types';
+import { FullDeviceExportData } from '../utils/dbStorage';
+import {
+  Settings,
+  Download,
+  Upload,
+  RotateCcw,
+  ShieldCheck,
+  Database,
+  FileText,
+  Sparkles,
+  HardDriveDownload,
+  CheckCircle,
+  RefreshCw,
+  Key,
+  Bot,
+  Cpu,
+  Check,
+  AlertCircle,
+  Save,
+  Sliders,
+  User,
+  Users,
+  Shield,
+  Layers
+} from 'lucide-react';
 import { PwaInstallBanner } from './PwaInstallBanner';
 import { cacheAllRoutinesMedia } from '../utils/mediaCache';
 import { getCustomAiConfig, saveCustomAiConfig, PRESETS, CustomAiConfig, AiProvider } from '../utils/aiConfig';
@@ -16,6 +40,11 @@ interface SettingsManagerProps {
     recoveredRoutinesCount: number;
     recoveredSessionsCount: number;
   }>;
+  users?: UserProfile[];
+  activeUser?: UserProfile;
+  onOpenUserModal?: () => void;
+  onExportAllUsers?: () => void;
+  onImportAllUsers?: (data: FullDeviceExportData) => Promise<number>;
 }
 
 export const SettingsManager: React.FC<SettingsManagerProps> = ({
@@ -24,7 +53,12 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
   onResetPlan,
   onImportData,
   onOpenTextImporter,
-  onAutoRecoverData
+  onAutoRecoverData,
+  users = [],
+  activeUser,
+  onOpenUserModal,
+  onExportAllUsers,
+  onImportAllUsers
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isCachingMedia, setIsCachingMedia] = useState<boolean>(false);
@@ -213,6 +247,20 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
 
         const parsed = JSON.parse(text);
 
+        // Check if multi-user device backup
+        if (parsed.version === '2.0_multi_user' && onImportAllUsers) {
+          onImportAllUsers(parsed)
+            .then((userCount) => {
+              alert(
+                `بازیابی بکاپ چندکاربره با موفقیت انجام شد! 🎉\n\nتعداد ${userCount} کاربر به همراه تمامی برنامه‌ها و سوابق تمرینی آنها روی این دستگاه بازگردانی شدند.`
+              );
+            })
+            .catch((err) => {
+              alert('خطا در بازیابی بکاپ چندکاربره: ' + (err.message || 'فایل نامعتبر است'));
+            });
+          return;
+        }
+
         const importedRoutines = parsed.routines && Array.isArray(parsed.routines)
           ? parsed.routines
           : Array.isArray(parsed)
@@ -265,11 +313,58 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
       <div>
         <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
           <Settings className="w-5 h-5 text-[#D1FF00]" />
-          تنظیمات و نصب اپلیکیشن
+          تنظیمات و مدیریت برنامه
         </h2>
         <p className="text-xs text-slate-400 mt-1">
-          نصب نسخه آفلاین، پشتیبان‌گیری، بازگردانی اطلاعات و مدیریت برنامه
+          مدیریت کاربران دستگاه، نصب آفلاین، پشتیبان‌گیری، کلید API و بازگردانی اطلاعات
         </p>
+      </div>
+
+      {/* Active User & Local Device Storage Section */}
+      <div className="p-5 bg-gradient-to-br from-neutral-900 via-neutral-900 to-emerald-950/30 border border-emerald-500/30 rounded-3xl space-y-4 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div
+              className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-slate-950 shadow-lg shrink-0"
+              style={{ backgroundColor: activeUser?.avatarColor || '#D1FF00' }}
+            >
+              <User className="w-6 h-6 stroke-[2.5]" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-extrabold text-neutral-100">
+                  {activeUser?.name || 'ورزشکار فعال'}
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-[#D1FF00] text-slate-950">
+                  کاربر فعلی دستگاه
+                </span>
+              </div>
+              <p className="text-xs text-neutral-400 mt-0.5">
+                {activeUser?.goal || 'عضله‌سازی و هایپرتروفی'}
+                {activeUser?.experienceLevel && ` • سابقه: ${activeUser.experienceLevel}`}
+                {activeUser?.weightKg && ` • ${activeUser.weightKg} کیلو`}
+                {activeUser?.heightCm && ` • ${activeUser.heightCm} سانت`}
+              </p>
+            </div>
+          </div>
+
+          {onOpenUserModal && (
+            <button
+              onClick={onOpenUserModal}
+              className="px-4 py-2.5 rounded-2xl bg-neutral-800 hover:bg-neutral-700 text-[#D1FF00] border border-neutral-700 hover:border-[#D1FF00]/40 text-xs font-extrabold flex items-center justify-center gap-2 transition shadow-md shrink-0"
+            >
+              <Users className="w-4 h-4" />
+              <span>مدیریت کاربران ({users.length} کاربر)</span>
+            </button>
+          )}
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-neutral-950/70 border border-neutral-800/80 text-xs text-neutral-300 flex items-start gap-2.5">
+          <Shield className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+          <span className="leading-relaxed">
+            <strong className="text-emerald-300">ذخیره‌سازی ۱۰۰٪ محلی روی همین دستگاه:</strong> اطلاعات و برنامه‌های ورزشی هر کاربر مستقلاً در حافظه مرورگر ذخیره می‌شود. هیچ داده‌ای با سایرین یا روی سرور عمومی به اشتراک گذاشته نمی‌شود.
+          </span>
+        </div>
       </div>
 
       {/* PWA Install Banner */}
@@ -537,7 +632,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
               className="py-3 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-2 transition"
             >
               <Download className="w-4 h-4 text-[#D1FF00]" />
-              دانلود فایل پشتیبان (JSON)
+              دانلود پشتیبان کاربر فعلی (JSON)
             </button>
 
             <button
@@ -545,7 +640,7 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
               className="py-3 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-2 transition"
             >
               <Upload className="w-4 h-4 text-sky-400" />
-              بازیابی از فایل پشتیبان
+              بازیابی از فایل پشتیبان (تک‌کاربر / چندکاربر)
             </button>
             <input
               ref={fileInputRef}
@@ -555,6 +650,16 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
               className="hidden"
             />
           </div>
+
+          {onExportAllUsers && (
+            <button
+              onClick={onExportAllUsers}
+              className="w-full py-3 px-4 rounded-2xl bg-indigo-950/40 hover:bg-indigo-900/50 border border-indigo-500/40 text-indigo-300 font-bold text-xs flex items-center justify-center gap-2 transition shadow-lg shadow-indigo-500/10"
+            >
+              <Layers className="w-4 h-4 text-indigo-400" />
+              <span>دانلود فایل پشتیبان کامل همه کاربران این دستگاه (چندکاربره)</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -578,27 +683,27 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
         </button>
       </div>
 
-      {/* Reset Plan Section */}
+      {/* Clear Routines Section */}
       <div className="p-5 bg-slate-900 border border-slate-800 rounded-3xl space-y-4 shadow-xl">
         <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-          <RotateCcw className="w-4 h-4 text-amber-400" />
-          بازنشانی به برنامه هفتگی اولیه
+          <RotateCcw className="w-4 h-4 text-rose-400" />
+          پاکسازی و شروع مجدد برنامه کاربر
         </h3>
 
         <p className="text-xs text-slate-400 leading-relaxed">
-          اگر تغییراتی در حرکات برنامه ایجاد کرده‌اید و می‌خواهید مجدداً برنامه اولیه ۳ روزه (سینه + جلو بازو، پا + پشت بازو، سرشانه + زیر بغل) بارگذاری شود، از این گزینه استفاده کنید.
+          اگر می‌خواهید کلیه روزها و حرکات ثبت‌شده برای این کاربر را پاک کرده و از نو با متن پیام مربی یا دستی روزهای جدید ایجاد کنید، از این دکمه استفاده نمایید.
         </p>
 
         <button
           onClick={() => {
-            if (confirm('آیا از بازنشانی برنامه به حالت اولیه اطمینان دارید؟ تغییرات حرکات سفارشی شما بازنشانی خواهد شد.')) {
+            if (confirm('آیا از پاکسازی کلیه روزها و حرکات برنامه این کاربر اطمینان دارید؟')) {
               onResetPlan();
             }
           }}
-          className="py-3 px-4 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-bold text-xs flex items-center justify-center gap-2 transition"
+          className="py-3 px-4 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 font-bold text-xs flex items-center justify-center gap-2 transition"
         >
-          <RotateCcw className="w-4 h-4 text-amber-400" />
-          بارگذاری مجدد برنامه هفتگی کاربر
+          <RotateCcw className="w-4 h-4 text-rose-400" />
+          پاکسازی برنامه و شروع مجدد
         </button>
       </div>
 
