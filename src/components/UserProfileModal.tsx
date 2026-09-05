@@ -25,7 +25,7 @@ interface UserProfileModalProps {
   onSelectUser: (userId: string) => void;
   onAddUser: (
     user: Omit<UserProfile, 'id' | 'createdAt'>,
-    routineOption: 'template' | 'empty' | 'copy'
+    routineOption: 'empty' | 'copy'
   ) => void;
   onUpdateUser: (updatedUser: UserProfile) => void;
   onDeleteUser: (userId: string) => void;
@@ -76,7 +76,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [weightKg, setWeightKg] = useState<string>('75');
   const [heightCm, setHeightCm] = useState<string>('178');
   const [gender, setGender] = useState<'male' | 'female'>('male');
-  const [routineOption, setRoutineOption] = useState<'template' | 'empty' | 'copy'>('template');
+  const [routineOption, setRoutineOption] = useState<'empty' | 'copy'>('empty');
 
   if (!isOpen) return null;
 
@@ -89,7 +89,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     setWeightKg('75');
     setHeightCm('178');
     setGender('male');
-    setRoutineOption('template');
+    setRoutineOption('empty');
     setMode('add');
   };
 
@@ -434,16 +434,16 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                       <input
                         type="radio"
                         name="routineOption"
-                        checked={routineOption === 'template'}
-                        onChange={() => setRoutineOption('template')}
+                        checked={routineOption === 'empty'}
+                        onChange={() => setRoutineOption('empty')}
                         className="accent-[#D1FF00]"
                       />
                       <div className="text-xs">
                         <span className="font-bold text-neutral-200 block">
-                          برنامه استاندارد ۳ روزه (سینه، پا، سرشانه و زیربغل)
+                          برنامه خالی (شروع از ابتدا بدون برنامه پیش‌فرض)
                         </span>
                         <span className="text-[11px] text-neutral-400">
-                          همراه با ویدیوها و گیف‌های متحرک برای شروع سریع
+                          کاربر برنامه خود را از روی متن پیام مربی یا دستی تعریف می‌کند
                         </span>
                       </div>
                     </label>
@@ -461,25 +461,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                           کپی از برنامه کاربر فعلی ({activeUser.name})
                         </span>
                         <span className="text-[11px] text-neutral-400">
-                          همان روزها و حرکات اختصاصی به کاربر جدید کپی می‌شود
-                        </span>
-                      </div>
-                    </label>
-
-                    <label className="flex items-center gap-2 p-2.5 rounded-xl bg-neutral-950 border border-neutral-800 cursor-pointer hover:border-neutral-700">
-                      <input
-                        type="radio"
-                        name="routineOption"
-                        checked={routineOption === 'empty'}
-                        onChange={() => setRoutineOption('empty')}
-                        className="accent-[#D1FF00]"
-                      />
-                      <div className="text-xs">
-                        <span className="font-bold text-neutral-200 block">
-                          برنامه خالی (ایجاد اختصاصی از ابتدا)
-                        </span>
-                        <span className="text-[11px] text-neutral-400">
-                          کاربر برنامه خود را از روی متن پیام مربی یا دستی تعریف می‌کند
+                          روزها و حرکات ثبت‌شده کاربر فعلی برای کاربر جدید کپی می‌شود
                         </span>
                       </div>
                     </label>
