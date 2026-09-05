@@ -170,25 +170,11 @@ export const MuscleWikiDiagnostic: React.FC<{ onClose?: () => void }> = ({ onClo
         }
       } else {
         setProxyStatus('failed');
-        addLog('پروکسی ویدیو / GIF', 'warning', `پروکسی سرور پاسخ ${mediaRes.status} داد. سیستم fallback محلی GIF را فعال می‌کند.`, { status: mediaRes.status });
+        addLog('پروکسی ویدیو / GIF', 'error', `پروکسی سرور پاسخ ${mediaRes.status} داد. مدیای محلی دیگر پشتیبانی نمی‌شود.`, { status: mediaRes.status });
       }
     } catch (err: any) {
       setProxyStatus('failed');
       addLog('پروکسی ویدیو / GIF', 'error', `خطا در دریافت پروکسی رسانه: ${err.message}`);
-    }
-
-    // 4. Offline Fallback Asset Check
-    const localGifPath = `/exercises/${testExerciseName.replace(/\s+/g, '_')}.gif`;
-    addLog('فایل پشتیبان محلی', 'pending', `بررسی وجود فایل محلی آفلاین GIF: ${localGifPath}...`);
-    try {
-      const localGifRes = await fetch(localGifPath, { method: 'HEAD' });
-      if (localGifRes.ok) {
-        addLog('فایل پشتیبان محلی', 'success', `فایل GIF پشتیبان آفلاین با موفقیت پیدا شد و آماده نمایش بدون اینترنت است (HTTP 200).`, { path: localGifPath });
-      } else {
-        addLog('فایل پشتیبان محلی', 'warning', `فایل در مسیر ${localGifPath} یافت نشد (HTTP ${localGifRes.status}).`, { path: localGifPath });
-      }
-    } catch (err: any) {
-      addLog('فایل پشتیبان محلی', 'error', `خطا در تست فایل محلی: ${err.message}`);
     }
 
     setIsRunning(false);
@@ -214,14 +200,6 @@ export const MuscleWikiDiagnostic: React.FC<{ onClose?: () => void }> = ({ onClo
     setMediaError(true);
     setMediaLoaded(false);
     console.warn('[MuscleWiki Media Tester] Media render error on source:', activeMediaSrc, e);
-
-    // Auto-try fallback to local GIF
-    const fallbackPath = `/exercises/${testExerciseName.replace(/\s+/g, '_')}.gif`;
-    if (activeMediaSrc !== fallbackPath) {
-      console.log('[MuscleWiki Media Tester] Auto switching to local fallback GIF:', fallbackPath);
-      setActiveMediaSrc(fallbackPath);
-      setMediaType('image');
-    }
   };
 
   return (
@@ -389,20 +367,9 @@ export const MuscleWikiDiagnostic: React.FC<{ onClose?: () => void }> = ({ onClo
             </div>
 
             <div className="flex items-center justify-between text-[11px] text-neutral-400 font-mono dir-ltr">
-              <span className="truncate max-w-[200px]" title={activeMediaSrc}>
+              <span className="truncate max-w-full" title={activeMediaSrc}>
                 Src: {activeMediaSrc}
               </span>
-              <button
-                onClick={() => {
-                  const localFallback = `/exercises/${testExerciseName.replace(/\s+/g, '_')}.gif`;
-                  setActiveMediaSrc(localFallback);
-                  setMediaType('image');
-                  handleMediaLoadStart();
-                }}
-                className="text-[#D1FF00] hover:underline font-sans text-[11px]"
-              >
-                سوئیچ دستی به GIF محلی
-              </button>
             </div>
           </div>
 
@@ -485,7 +452,7 @@ export const MuscleWikiDiagnostic: React.FC<{ onClose?: () => void }> = ({ onClo
             <span>علت فنی صفحه سیاه و نحوه حل کامل آن:</span>
           </div>
           <p className="text-neutral-400 text-[11px] leading-relaxed">
-            سرور رسانه‌ای اصلی MuscleWiki (<code className="text-[#D1FF00]">media.musclewiki.com</code>) پشت سپر محافظتی Cloudflare قرار دارد و تمام درخواست‌های ویدیویی مستقیم را با خطای <strong>HTTP 403 Forbidden</strong> و صفحه چالش HTML مسدود می‌کند؛ به همین دلیل تگ‌های <code className="text-[#D1FF00]">&lt;video&gt;</code> استانداردهای مرورگر به صفحه کاملاً مشکی تبدیل می‌شوند. سیستم ما با تشخیص خودکار این بلاک در پروکسی سرور <code className="text-[#D1FF00]">/api/proxy-media</code>، انیمیشن‌های GIF حرکت باکیفیت بالا (HD GIF) را به‌صورت ۱۰۰٪ روان و آفلاین بارگذاری می‌کند تا هیچ‌گاه صفحه مشکی دیده نشود.
+            سرور رسانه‌ای MuscleWiki (<code className="text-[#D1FF00]">media.musclewiki.com</code>) اغلب درخواست مستقیم مرورگر را بلاک می‌کند؛ به همین دلیل همه ویدیو/GIFها از مسیر پروکسی <code className="text-[#D1FF00]">/api/proxy-media</code> استریم می‌شوند. مدیای محلی دیگر استفاده نمی‌شود.
           </p>
         </div>
       </div>

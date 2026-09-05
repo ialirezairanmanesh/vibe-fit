@@ -34,7 +34,6 @@ import {
 import {
   MUSCLEWIKI_CATEGORIES,
   MUSCLEWIKI_EQUIPMENT,
-  MUSCLEWIKI_EXERCISES_DATABASE,
   MuscleWikiExercise
 } from '../data/musclewikiDataset';
 
@@ -123,7 +122,8 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
   const [mwSearchTerm, setMwSearchTerm] = useState('');
   const [mwCategory, setMwCategory] = useState<string>('all');
   const [mwEquipment, setMwEquipment] = useState<string>('all');
-  const [mwExercises, setMwExercises] = useState<MuscleWikiExercise[]>(MUSCLEWIKI_EXERCISES_DATABASE);
+  const [mwExercises, setMwExercises] = useState<MuscleWikiExercise[]>([]);
+  const [mwFetchError, setMwFetchError] = useState<string | null>(null);
   const [isLoadingMw, setIsLoadingMw] = useState<boolean>(false);
   const [selectedMwModal, setSelectedMwModal] = useState<MuscleWikiExercise | null>(null);
 
@@ -163,38 +163,24 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
 
     console.log('[ExerciseLibrary] Fetching MuscleWiki exercises:', queryParams.toString());
 
+    setMwFetchError(null);
     fetch(`/api/musclewiki/exercises?${queryParams.toString()}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+        return data;
       })
       .then((data) => {
         if (!isMounted) return;
         console.log('[ExerciseLibrary] Received MuscleWiki exercises count:', data?.exercises?.length, 'source:', data?.source);
-        if (data && Array.isArray(data.exercises)) {
-          setMwExercises(data.exercises);
-        } else {
-          setMwExercises(MUSCLEWIKI_EXERCISES_DATABASE);
-        }
+        setMwExercises(Array.isArray(data?.exercises) ? data.exercises : []);
+        setMwFetchError(null);
       })
       .catch((err) => {
-        console.warn('[ExerciseLibrary] MuscleWiki API client fetch error, using local dataset fallback:', err);
+        console.warn('[ExerciseLibrary] MuscleWiki API fetch error:', err);
         if (isMounted) {
-          // Client-side fallback filter
-          let filtered = [...MUSCLEWIKI_EXERCISES_DATABASE];
-          if (mwCategory !== 'all') filtered = filtered.filter((x) => x.category === mwCategory);
-          if (mwEquipment !== 'all')
-            filtered = filtered.filter((x) => x.equipmentEn.toLowerCase().includes(mwEquipment.toLowerCase()));
-          if (mwSearchTerm) {
-            const q = mwSearchTerm.toLowerCase();
-            filtered = filtered.filter(
-              (x) =>
-                x.nameEn.toLowerCase().includes(q) ||
-                x.nameFa.toLowerCase().includes(q) ||
-                x.targetMuscleFa.toLowerCase().includes(q)
-            );
-          }
-          setMwExercises(filtered);
+          setMwExercises([]);
+          setMwFetchError(err?.message || 'خطا در دریافت حرکات از MuscleWiki API');
         }
       })
       .finally(() => {
@@ -269,17 +255,17 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
       id: `mw-${addingMwExercise.id}-${Date.now()}`,
       nameFa: addingMwExercise.nameFa,
       nameEn: addingMwExercise.nameEn,
-      category: addingMwExercise.category,
-      targetMuscleFa: addingMwExercise.targetMuscleFa,
-      equipmentFa: addingMwExercise.equipmentFa,
+      category: addingMwExercise.category as ExerciseCategory,
+      targetMuscleFa: addingMwExercise.targetMuscleFa || addingMwExercise.targetMuscleEn || 'عضلات هدف',
+      equipmentFa: addingMwExercise.equipmentFa || addingMwExercise.equipmentEn || 'تجهیزات',
       targetSets: targetSets,
       targetReps: targetReps,
       defaultRestSeconds: addingMwExercise.defaultRestSeconds || 60,
-      instructionsFa: addingMwExercise.instructionsFa,
-      tipsFa: addingMwExercise.tipsFa,
+      instructionsFa: addingMwExercise.instructionsFa || [],
+      tipsFa: addingMwExercise.tipsFa || [],
       animationType: 'generic',
       gifUrl: addingMwExercise.gifUrl,
-      isBodyweight: addingMwExercise.equipmentEn.toLowerCase().includes('bodyweight')
+      isBodyweight: (addingMwExercise.equipmentEn || '').toLowerCase().includes('bodyweight')
     };
 
     if (onAddCustomExercise) {
@@ -549,12 +535,24 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
           {isLoadingMw && (
             <div className="py-12 text-center text-xs text-neutral-400 flex items-center justify-center gap-2">
               <Sparkles className="w-5 h-5 text-[#D1FF00] animate-spin" />
-              <span>در حال فراخوانی پایگاه داده MuscleWiki...</span>
+              <span>در حال فراخوانی MuscleWiki API...</span>
+            </div>
+          )}
+
+          {!isLoadingMw && mwFetchError && (
+            <div className="p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-rose-300 text-sm">
+              {mwFetchError}
+            </div>
+          )}
+
+          {!isLoadingMw && !mwFetchError && mwExercises.length === 0 && (
+            <div className="p-4 rounded-2xl border border-neutral-800 bg-neutral-900/50 text-neutral-400 text-sm text-center">
+              حرکتی از MuscleWiki پیدا نشد.
             </div>
           )}
 
           {/* MuscleWiki Exercise Grid */}
-          {!isLoadingMw && (
+          {!isLoadingMw && !mwFetchError && mwExercises.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {mwExercises.map((mwEx) => (
                 <div
@@ -566,7 +564,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
                     <div className="relative bg-slate-950 h-52 overflow-hidden flex items-center justify-center border-b border-neutral-800">
                       <ExerciseAnimation
                         type="generic"
-                        category={mwEx.category}
+                        category={(mwEx.category as ExerciseCategory) || 'chest'}
                         gifUrl={mwEx.gifUrl}
                         exerciseNameEn={mwEx.nameEn}
                         className="w-full h-full"
@@ -576,9 +574,11 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
                         MuscleWiki API
                       </span>
 
-                      <span className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-neutral-900/90 text-[10px] text-neutral-300 font-bold border border-neutral-800">
-                        {mwEx.difficultyFa}
-                      </span>
+                      {mwEx.difficultyFa && (
+                        <span className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-neutral-900/90 text-[10px] text-neutral-300 font-bold border border-neutral-800">
+                          {mwEx.difficultyFa}
+                        </span>
+                      )}
                     </div>
 
                     {/* Content Details */}
@@ -591,12 +591,16 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-400 pt-1">
-                        <span className="bg-neutral-900 border border-neutral-800 px-2.5 py-1 rounded-xl text-slate-300">
-                          🎯 {mwEx.targetMuscleFa}
-                        </span>
-                        <span className="bg-neutral-900 border border-neutral-800 px-2.5 py-1 rounded-xl text-slate-300">
-                          🛠️ {mwEx.equipmentFa}
-                        </span>
+                        {(mwEx.targetMuscleFa || mwEx.targetMuscleEn) && (
+                          <span className="bg-neutral-900 border border-neutral-800 px-2.5 py-1 rounded-xl text-slate-300">
+                            🎯 {mwEx.targetMuscleFa || mwEx.targetMuscleEn}
+                          </span>
+                        )}
+                        {(mwEx.equipmentFa || mwEx.equipmentEn) && (
+                          <span className="bg-neutral-900 border border-neutral-800 px-2.5 py-1 rounded-xl text-slate-300">
+                            🛠️ {mwEx.equipmentFa || mwEx.equipmentEn}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -655,11 +659,11 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
             {/* Config & Key Details Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 text-xs">
               <div className="p-3 bg-neutral-900/90 rounded-2xl border border-neutral-800">
-                <span className="text-neutral-400 block mb-1">کلید API تنظیم شده:</span>
+                <span className="text-neutral-400 block mb-1">کلید API:</span>
                 <code className="text-[#D1FF00] font-mono text-[11px] block truncate">
-                  mw_6ZDLaxXph7I9hyMH_wpehHIr55l6...
+                  از env: MUSCLEWIKI_API_KEY
                 </code>
-                <span className="text-[10px] text-neutral-500 mt-1 block">سطح دسترسی: Basic Playground Key</span>
+                <span className="text-[10px] text-neutral-500 mt-1 block">بدون کلید محلی — فقط API زنده</span>
               </div>
 
               <div className="p-3 bg-neutral-900/90 rounded-2xl border border-neutral-800">
