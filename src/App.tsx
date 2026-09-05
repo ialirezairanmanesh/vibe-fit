@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { ActiveTab, RoutineDay, WorkoutSession, Exercise, ActiveWorkoutState, UserProfile } from './types';
-import { INITIAL_ROUTINES } from './data/initialPlan';
 import { autoFixRoutinesMetadata } from './utils/workoutTextParser';
 import { 
   getUsersListPersistent,
@@ -61,7 +60,15 @@ export default function App() {
 
         const loadedRoutines = await loadUserRoutinesPersistent(currentU.id);
         const loadedSessions = await loadUserSessionsPersistent(currentU.id);
-        const initialOrLoaded = loadedRoutines && loadedRoutines.length > 0 ? loadedRoutines : INITIAL_ROUTINES;
+
+        // If the user's routines are the old stock default template, clear them so user has a clean slate as requested
+        const isOldDefaultTemplate = 
+          loadedRoutines && 
+          loadedRoutines.length === 3 && 
+          loadedRoutines.every((r) => ['day-1', 'day-2', 'day-3'].includes(r.id)) &&
+          (!loadedSessions || loadedSessions.length === 0);
+
+        const initialOrLoaded = isOldDefaultTemplate ? [] : (loadedRoutines || []);
 
         // Auto recover and merge any custom media/links or data from older app versions
         const recovery = await recoverAndMergeAllBrowserData(initialOrLoaded, loadedSessions || []);
@@ -70,8 +77,8 @@ export default function App() {
           const fixed = autoFixRoutinesMetadata(recovery.mergedRoutines);
           setRoutines(fixed);
           setPastSessions(recovery.mergedSessions);
-          if (!loadedRoutines || loadedRoutines.length === 0) {
-            await saveUserRoutinesPersistent(currentU.id, fixed);
+          if (isOldDefaultTemplate) {
+            await saveUserRoutinesPersistent(currentU.id, []);
           }
         }
 
@@ -83,8 +90,7 @@ export default function App() {
         }
       } catch (err) {
         console.error('Error loading persistent user data:', err);
-        const fixed = autoFixRoutinesMetadata(INITIAL_ROUTINES);
-        if (isMounted) setRoutines(fixed);
+        if (isMounted) setRoutines([]);
       }
     }
 
@@ -176,11 +182,7 @@ export default function App() {
     setActiveUser(targetUser);
 
     // Load new user's routines
-    let userRoutines = await loadUserRoutinesPersistent(userId);
-    if (!userRoutines || userRoutines.length === 0) {
-      userRoutines = INITIAL_ROUTINES;
-      await saveUserRoutinesPersistent(userId, userRoutines);
-    }
+    const userRoutines = (await loadUserRoutinesPersistent(userId)) || [];
     setRoutines(autoFixRoutinesMetadata(userRoutines));
 
     // Load new user's sessions
@@ -198,7 +200,7 @@ export default function App() {
   // Add New User Profile
   const handleAddUser = async (
     newUserFields: Omit<UserProfile, 'id' | 'createdAt'>,
-    routineOption: 'template' | 'empty' | 'copy'
+    routineOption: 'empty' | 'copy'
   ) => {
     // Flush current user first
     if (activeUser?.id) {
@@ -215,9 +217,7 @@ export default function App() {
     };
 
     let initialNewRoutines: RoutineDay[] = [];
-    if (routineOption === 'template') {
-      initialNewRoutines = INITIAL_ROUTINES;
-    } else if (routineOption === 'copy') {
+    if (routineOption === 'copy') {
       initialNewRoutines = JSON.parse(JSON.stringify(routines));
     } else {
       initialNewRoutines = [];
@@ -302,7 +302,7 @@ export default function App() {
     setUsers(updatedUsers);
     setActiveUser(currentU);
 
-    const userRoutines = (await loadUserRoutinesPersistent(currentU.id)) || INITIAL_ROUTINES;
+    const userRoutines = (await loadUserRoutinesPersistent(currentU.id)) || [];
     const userSessions = (await loadUserSessionsPersistent(currentU.id)) || [];
     setRoutines(autoFixRoutinesMetadata(userRoutines));
     setPastSessions(userSessions);
@@ -379,7 +379,7 @@ export default function App() {
 
   // Handle reset routines plan
   const handleResetPlan = () => {
-    saveRoutinesState(INITIAL_ROUTINES);
+    saveRoutinesState([]);
   };
 
   // Add custom exercise
