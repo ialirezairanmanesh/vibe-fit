@@ -752,229 +752,182 @@ ${currentRoutines ? JSON.stringify(currentRoutines, null, 2) : "هنوز برن�
     }
   });
 
-  // In-memory cache for MuscleWiki API queries (24 hour TTL)
-  const mwApiCache = new Map<string, { data: any; expiresAt: number }>();
-
-  const pickMediaUrl = (ex: any): { primary: string; side: string; female: string } => {
-    const videos = Array.isArray(ex.videos) ? ex.videos : [];
-    const images = Array.isArray(ex.images) ? ex.images : [];
-    const videoUrl = (v: any) => (typeof v === "string" ? v : v?.url || v?.video || v?.src) || "";
-    const byAngle = (angle: string) =>
-      videos.find((v: any) => String(v?.angle || v?.view || v?.name || v?.url || "").toLowerCase().includes(angle));
-    const byGender = (gender: string) =>
-      videos.find((v: any) => String(v?.gender || v?.sex || "").toLowerCase().includes(gender));
-    const front = byAngle("front") || videos[0];
-    const side = byAngle("side") || videos[1];
-    const female = byGender("female");
-    const imageUrl = (img: any) => (typeof img === "string" ? img : img?.url) || "";
-    const primary = videoUrl(front) || ex.video_url || ex.videoUrl || ex.gif_url || ex.gifUrl || imageUrl(images[0]) || "";
-    const sideUrl = videoUrl(side) || ex.side_video_url || ex.sideGifUrl || imageUrl(images[1]) || "";
-    const femaleUrl = videoUrl(female) || ex.female_video_url || ex.femaleGifUrl || "";
-    return { primary: String(primary || ""), side: String(sideUrl || ""), female: String(femaleUrl || "") };
+  // Free catalog: yuhonas/free-exercise-db (Unlicense) — no API key
+  const FREE_IMG_CDN = "https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@main/exercises";
+  type FreeEx = {
+    id: string;
+    name: string;
+    level?: string | null;
+    equipment?: string | null;
+    primaryMuscles?: string[];
+    secondaryMuscles?: string[];
+    instructions?: string[];
+    images?: string[];
   };
 
-  const mapBodyPartToMuscle = (cat: string): string => {
-    const c = String(cat || "").toLowerCase();
-    if (c === "chest") return "Chest";
-    if (c === "biceps") return "Biceps";
-    if (c === "triceps") return "Triceps";
-    if (c === "shoulders") return "Shoulders";
-    if (c === "back") return "Lats";
-    if (c === "legs") return "Quadriceps";
-    if (c === "abs") return "Abdominals";
-    return cat;
+  let freeCatalog: FreeEx[] | null = null;
+  const loadFreeCatalog = (): FreeEx[] => {
+    if (freeCatalog) return freeCatalog;
+    // cwd in Docker is /app; catalog is copied next to dist/ (not inside DATA_DIR)
+    const candidates = [
+      path.join(process.cwd(), "catalog", "free_exercises_catalog_v1.json"),
+      path.join(process.cwd(), "dist", "..", "catalog", "free_exercises_catalog_v1.json")
+    ];
+    for (const p of candidates) {
+      if (!fs.existsSync(p)) continue;
+      const parsed = JSON.parse(fs.readFileSync(p, "utf8"));
+      if (Array.isArray(parsed)) {
+        freeCatalog = parsed;
+        console.log(`[Free Catalog] Loaded ${parsed.length} exercises from ${p}`);
+        return freeCatalog;
+      }
+    }
+    throw new Error("Free exercise catalog not found (catalog/free_exercises_catalog_v1.json)");
   };
 
-  const mapMwCategoryFromMuscles = (ex: any): string => {
-    const muscles = [
-      ...(Array.isArray(ex.primary_muscles) ? ex.primary_muscles : []),
-      ...(Array.isArray(ex.muscles) ? ex.muscles : []),
-      ex.target_group,
-      ex.category
-    ]
-      .filter(Boolean)
-      .map((m) => String(m).toLowerCase());
-    if (muscles.some((m) => m.includes("chest") || m.includes("pectoral"))) return "chest";
-    if (muscles.some((m) => m.includes("bicep"))) return "biceps";
-    if (muscles.some((m) => m.includes("tricep"))) return "triceps";
-    if (muscles.some((m) => m.includes("shoulder") || m.includes("delt"))) return "shoulders";
-    if (muscles.some((m) => m.includes("lat") || m.includes("back") || m.includes("trap") || m.includes("rhomb"))) return "back";
-    if (muscles.some((m) => m.includes("quad") || m.includes("hamstring") || m.includes("glute") || m.includes("calf") || m.includes("leg"))) return "legs";
-    if (muscles.some((m) => m.includes("ab") || m.includes("core") || m.includes("oblique"))) return "abs";
+  const mapMuscleToCategory = (muscles: string[]): string => {
+    const m = muscles.map((x) => String(x).toLowerCase());
+    if (m.some((x) => x.includes("chest"))) return "chest";
+    if (m.some((x) => x.includes("bicep"))) return "biceps";
+    if (m.some((x) => x.includes("tricep"))) return "triceps";
+    if (m.some((x) => x.includes("shoulder"))) return "shoulders";
+    if (m.some((x) => x.includes("lat") || x.includes("back") || x.includes("trap"))) return "back";
+    if (m.some((x) => x.includes("quad") || x.includes("hamstring") || x.includes("glute") || x.includes("calf") || x.includes("adductor") || x.includes("abductor"))) return "legs";
+    if (m.some((x) => x.includes("abdomin") || x.includes("oblique"))) return "abs";
     return "chest";
   };
 
-  // API Endpoint: MuscleWiki Exercises Search & Explorer Proxy (official API only)
-  app.all("/api/musclewiki/exercises", async (req, res) => {
+  const categoryMuscleNeedles = (cat: string): string[] => {
+    const c = String(cat || "").toLowerCase();
+    if (c === "chest") return ["chest"];
+    if (c === "biceps") return ["bicep"];
+    if (c === "triceps") return ["tricep"];
+    if (c === "shoulders") return ["shoulder"];
+    if (c === "back") return ["lat", "middle back", "lower back", "trap"];
+    if (c === "legs") return ["quad", "hamstring", "glute", "calf", "adductor", "abductor"];
+    if (c === "abs") return ["abdomin", "oblique"];
+    return [];
+  };
+
+  const mapEquipmentFilter = (eq: string): string[] => {
+    const e = String(eq || "").toLowerCase();
+    if (e === "bodyweight") return ["body only"];
+    if (e === "kettlebell") return ["kettlebells", "kettlebell"];
+    if (e === "barbell") return ["barbell", "e-z curl bar"];
+    if (e === "dumbbell") return ["dumbbell"];
+    if (e === "cable") return ["cable"];
+    if (e === "machine") return ["machine"];
+    return [e];
+  };
+
+  const difficultyFa = (level?: string | null) => {
+    const l = String(level || "").toLowerCase();
+    if (l === "beginner") return "مبتدی";
+    if (l === "intermediate") return "متوسط";
+    if (l === "expert") return "پیشرفته";
+    return level || "";
+  };
+
+  const mapFreeExercise = (ex: FreeEx) => {
+    const primary = Array.isArray(ex.primaryMuscles) ? ex.primaryMuscles : [];
+    const secondary = Array.isArray(ex.secondaryMuscles) ? ex.secondaryMuscles : [];
+    const steps = Array.isArray(ex.instructions) ? ex.instructions : [];
+    const images = Array.isArray(ex.images) ? ex.images : [];
+    const cat = mapMuscleToCategory(primary);
+    const img = (rel?: string) => (rel ? `${FREE_IMG_CDN}/${rel.replace(/^\/+/, "")}` : "");
+    const eq = ex.equipment || "";
+    return {
+      id: String(ex.id || ex.name),
+      nameEn: ex.name,
+      nameFa: ex.name,
+      category: cat,
+      targetMuscleEn: primary[0] || "",
+      targetMuscleFa: primary[0] || "",
+      secondaryMusclesFa: secondary,
+      equipmentEn: eq,
+      equipmentFa: eq,
+      difficultyFa: difficultyFa(ex.level),
+      instructionsFa: steps,
+      instructionsEn: steps,
+      tipsFa: [],
+      gifUrl: img(images[0]),
+      sideGifUrl: images[1] ? img(images[1]) : undefined,
+      source: "Free Exercise DB"
+    };
+  };
+
+  // Same path as before so the client keeps working — now free local catalog
+  app.all("/api/musclewiki/exercises", (req, res) => {
     res.setHeader("Content-Type", "application/json");
-    res.setHeader("Cache-Control", "public, max-age=86400, s-maxage=86400");
+    res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=3600");
     try {
-      const q = req.query.q || req.query.search || req.body?.search || "";
-      const category = req.query.category || req.body?.category || "all"; // app body-part filter
-      const muscle = req.query.muscle || req.query.targetMuscle || req.body?.muscle || "all";
-      const equipment = req.query.equipment || req.body?.equipment || "all";
-      const customApiKey =
-        req.headers["x-musclewiki-key"] ||
-        req.headers["x-api-key"] ||
-        req.query.apiKey ||
-        process.env.MUSCLEWIKI_API_KEY ||
-        "";
+      const q = String(req.query.q || req.query.search || req.body?.search || "").trim().toLowerCase();
+      const category = String(req.query.category || req.body?.category || "all").toLowerCase();
+      const equipment = String(req.query.equipment || req.body?.equipment || "all").toLowerCase();
+      const limitRaw = Number(req.query.limit || req.body?.limit || 0);
+      const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 876) : 0;
 
-      if (!customApiKey) {
-        return res.status(503).json({
-          success: false,
-          error: "MUSCLEWIKI_API_KEY is not configured"
+      let list = loadFreeCatalog();
+
+      if (category && category !== "all") {
+        const needles = categoryMuscleNeedles(category);
+        list = list.filter((ex) => {
+          const muscles = [...(ex.primaryMuscles || []), ...(ex.secondaryMuscles || [])].map((m) => m.toLowerCase());
+          return needles.some((n) => muscles.some((m) => m.includes(n)));
         });
       }
 
-      const cacheKey = `${q}:${category}:${muscle}:${equipment}`;
-      const now = Date.now();
-      const cached = mwApiCache.get(cacheKey);
-      if (cached && cached.expiresAt > now) {
-        console.log(`[MuscleWiki API Endpoint] Serving from server in-memory cache for key: "${cacheKey}"`);
-        return res.json(cached.data);
+      if (equipment && equipment !== "all") {
+        const allowed = mapEquipmentFilter(equipment);
+        list = list.filter((ex) => allowed.includes(String(ex.equipment || "").toLowerCase()));
       }
 
-      console.log(`[MuscleWiki API Endpoint] Request received - q: "${q}", category: "${category}", muscle: "${muscle}", equipment: "${equipment}"`);
-
-      const proxyIfNeeded = (rawUrl: string, nameEn?: string, cat?: string): string => {
-        if (!rawUrl || typeof rawUrl !== "string") return "";
-        if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
-          return `/api/proxy-media?url=${encodeURIComponent(rawUrl)}&exerciseName=${encodeURIComponent(nameEn || "")}&category=${encodeURIComponent(cat || "")}`;
-        }
-        // Relative branded stream paths from MuscleWiki
-        if (rawUrl.includes("videos/") || rawUrl.endsWith(".mp4") || rawUrl.endsWith(".webm")) {
-          const absolute = rawUrl.startsWith("/")
-            ? `https://media.musclewiki.com${rawUrl}`
-            : `https://media.musclewiki.com/media/uploads/${rawUrl.replace(/^\/+/, "")}`;
-          return `/api/proxy-media?url=${encodeURIComponent(absolute)}&exerciseName=${encodeURIComponent(nameEn || "")}&category=${encodeURIComponent(cat || "")}`;
-        }
-        return rawUrl;
-      };
-
-      const params = new URLSearchParams();
-      params.append("limit", "50");
-      // Official API: category = equipment; muscles = body part
-      if (equipment && equipment !== "all") params.append("category", String(equipment));
-      const muscleFilter =
-        muscle && muscle !== "all"
-          ? String(muscle)
-          : category && category !== "all"
-          ? mapBodyPartToMuscle(String(category))
-          : "";
-      if (muscleFilter) params.append("muscles", muscleFilter);
-
-      const mwUrl =
-        q && String(q).trim().length >= 2
-          ? (() => {
-              const sp = new URLSearchParams();
-              sp.append("q", String(q).trim());
-              sp.append("limit", "50");
-              if (equipment && equipment !== "all") sp.append("category", String(equipment));
-              if (muscleFilter) sp.append("muscles", muscleFilter);
-              return `https://api.musclewiki.com/search?${sp.toString()}`;
-            })()
-          : `https://api.musclewiki.com/exercises?${params.toString()}`;
-
-      const mwRes = await fetch(mwUrl, {
-        headers: {
-          "X-API-Key": String(customApiKey),
-          "Accept": "application/json"
-        }
-      });
-
-      console.log(`[MuscleWiki API Endpoint] External API HTTP status: ${mwRes.status} url=${mwUrl}`);
-
-      if (!mwRes.ok) {
-        const errBody = await mwRes.text().catch(() => "");
-        return res.status(502).json({
-          success: false,
-          error: `MuscleWiki API returned HTTP ${mwRes.status}`,
-          details: errBody.slice(0, 300)
+      if (q.length >= 2) {
+        list = list.filter((ex) => {
+          const hay = [
+            ex.name,
+            ...(ex.primaryMuscles || []),
+            ...(ex.secondaryMuscles || []),
+            ...(ex.instructions || [])
+          ]
+            .join(" ")
+            .toLowerCase();
+          return hay.includes(q);
         });
       }
 
-      const mwData = await mwRes.json();
-      const list = Array.isArray(mwData) ? mwData : (mwData?.results || mwData?.exercises || mwData?.data || []);
-      if (!Array.isArray(list) || list.length === 0) {
-        const resPayload = {
-          success: true,
-          source: "MuscleWiki Official API",
-          count: 0,
-          exercises: []
-        };
-        mwApiCache.set(cacheKey, { data: resPayload, expiresAt: Date.now() + 86400000 });
-        return res.json(resPayload);
-      }
+      if (limit) list = list.slice(0, limit);
 
-      const mappedList = list.map((ex: any) => {
-        const nameEnVal = ex.nameEn || ex.name || "Exercise";
-        const catVal = mapMwCategoryFromMuscles(ex);
-        const media = pickMediaUrl(ex);
-        const primaryMuscles = Array.isArray(ex.primary_muscles) ? ex.primary_muscles : [];
-        const steps = Array.isArray(ex.steps)
-          ? ex.steps
-          : typeof ex.steps === "string"
-          ? ex.steps.split(/\n+/).map((s: string) => s.trim()).filter(Boolean)
-          : [];
-        return {
-          ...ex,
-          id: String(ex.id || ex.slug || `mw-${nameEnVal}`.toLowerCase().replace(/\s+/g, "-")),
-          nameEn: nameEnVal,
-          nameFa: ex.nameFa || ex.name || "حرکت ورزشی",
-          category: catVal,
-          targetMuscleEn: primaryMuscles[0] || ex.targetMuscleEn || "",
-          targetMuscleFa: primaryMuscles[0] || ex.targetMuscleFa || "",
-          secondaryMusclesFa: primaryMuscles.slice(1),
-          equipmentEn: ex.category || ex.equipmentEn || "",
-          equipmentFa: ex.category || ex.equipmentFa || "",
-          difficultyFa: ex.difficulty || ex.difficultyFa || "",
-          instructionsFa: Array.isArray(ex.instructionsFa) ? ex.instructionsFa : steps,
-          instructionsEn: Array.isArray(ex.instructionsEn) ? ex.instructionsEn : steps,
-          tipsFa: Array.isArray(ex.tipsFa) ? ex.tipsFa : [],
-          gifUrl: proxyIfNeeded(media.primary, nameEnVal, catVal),
-          sideGifUrl: media.side ? proxyIfNeeded(media.side, nameEnVal, catVal) : undefined,
-          femaleGifUrl: media.female ? proxyIfNeeded(media.female, nameEnVal, catVal) : undefined,
-          source: "MuscleWiki API"
-        };
-      });
-
-      console.log(`[MuscleWiki API Endpoint] Official API returned ${mappedList.length} mapped exercises. First media URL: ${mappedList[0]?.gifUrl}`);
-      const resPayload = {
+      const exercises = list.map(mapFreeExercise);
+      return res.json({
         success: true,
-        source: "MuscleWiki Official API",
-        count: mappedList.length,
-        exercises: mappedList
-      };
-      mwApiCache.set(cacheKey, { data: resPayload, expiresAt: Date.now() + 86400000 });
-      return res.json(resPayload);
+        source: "Free Exercise DB (yuhonas)",
+        count: exercises.length,
+        exercises
+      });
     } catch (err: any) {
       console.error("Error in /api/musclewiki/exercises:", err);
-      return res.status(502).json({ success: false, error: err.message || "Failed to fetch MuscleWiki exercises." });
+      return res.status(500).json({ success: false, error: err.message || "Failed to load free exercise catalog." });
     }
   });
 
-  // API Endpoint: MuscleWiki MCP Info Endpoint
-  app.get("/api/musclewiki/mcp", (req, res) => {
+  app.get("/api/musclewiki/mcp", (_req, res) => {
     res.setHeader("Content-Type", "application/json");
     return res.json({
-      name: "MuscleWiki MCP Integration Server",
+      name: "Free Exercise Catalog",
       version: "1.0.0",
-      description: "Model Context Protocol (MCP) tool server for MuscleWiki exercise database and fitness mechanics",
+      description: "Local free exercise catalog (yuhonas/free-exercise-db) — browse and pick movements for routines",
+      source: "https://github.com/yuhonas/free-exercise-db",
+      license: "Unlicense",
       tools: [
         {
           name: "get_musclewiki_exercises",
-          description: "Search and filter over 1,900 MuscleWiki exercises with HD video demonstrations and step-by-step instructions",
+          description: "Search and filter ~876 free exercises with demo images and instructions",
           parameters: {
             category: "string (chest, biceps, triceps, legs, shoulders, back, abs)",
-            muscle: "string (target muscle group)",
             equipment: "string (barbell, dumbbell, cable, machine, bodyweight, kettlebell)",
             search: "string (keyword query)"
           }
-        },
-        {
-          name: "get_exercise_details",
-          description: "Retrieve comprehensive instructions, execution tips, and GIF links for a specific MuscleWiki exercise"
         }
       ],
       mcpEndpoint: "/api/musclewiki/exercises"

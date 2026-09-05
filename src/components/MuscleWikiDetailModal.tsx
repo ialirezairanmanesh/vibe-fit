@@ -56,12 +56,13 @@ export const MuscleWikiDetailModal: React.FC<MuscleWikiDetailModalProps> = ({
     setSearchQuery('');
     setSearchResults([]);
 
-    // Already a MuscleWiki API exercise (from library) — use as-is
-    if (isMuscleWikiExercise(exercise) && exercise.gifUrl?.includes('/api/proxy-media')) {
-      setMatchedMwExercise(exercise);
-      return;
-    }
-    if (isMuscleWikiExercise(exercise) && exercise.source === 'MuscleWiki API') {
+    // Already a catalog exercise (from library) — use as-is
+    if (
+      isMuscleWikiExercise(exercise) &&
+      (exercise.source === 'Free Exercise DB' ||
+        exercise.source === 'MuscleWiki API' ||
+        Boolean(exercise.gifUrl))
+    ) {
       setMatchedMwExercise(exercise);
       return;
     }
