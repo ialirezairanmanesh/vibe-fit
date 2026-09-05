@@ -180,7 +180,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
         console.warn('[ExerciseLibrary] MuscleWiki API fetch error:', err);
         if (isMounted) {
           setMwExercises([]);
-          setMwFetchError(err?.message || 'خطا در دریافت حرکات از MuscleWiki API');
+          setMwFetchError(err?.message || 'خطا در دریافت کاتالوگ رایگان');
         }
       })
       .finally(() => {
@@ -304,7 +304,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
             بانک و مرجع تخصصی حرکات ورزشی
           </h2>
           <p className="text-xs text-neutral-400 mt-1">
-            مشاهده حرکات برنامه‌تان + دسترسی به دیتابیس کامل و بین‌المللی MuscleWiki
+            مشاهده حرکات برنامه‌تان + کاتالوگ رایگان (~۸۷۶ حرکت) برای انتخاب و افزودن به روتین
           </p>
         </div>
 
@@ -351,7 +351,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
           }`}
         >
           <Globe className="w-4 h-4" />
-          <span>مرجع MuscleWiki</span>
+          <span>کاتالوگ رایگان</span>
         </button>
 
         <button
@@ -366,7 +366,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
           }`}
         >
           <Terminal className="w-4 h-4 text-cyan-400" />
-          <span>دیباگ & تست MuscleWiki</span>
+          <span>دیباگ کاتالوگ</span>
           <span className="px-1.5 py-0.5 rounded-full bg-cyan-950 text-cyan-400 text-[9px] font-black border border-cyan-800/50">
             تست ویدیو
           </span>
@@ -468,14 +468,14 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-bold text-[#D1FF00] flex items-center gap-1.5">
                 <Globe className="w-4 h-4" />
-                پایگاه داده بین‌المللی MuscleWiki API
+                کاتالوگ رایگان حرکات
               </span>
               <span className="text-[10px] text-neutral-400 bg-neutral-950 px-2.5 py-1 rounded-full border border-neutral-800 font-mono">
-                +1,900 Exercises & GIFs
+                ~876 Exercises
               </span>
             </div>
             <p className="text-xs text-neutral-300 leading-relaxed">
-              جستجو در بانک حرکات MuscleWiki به زبان فارسی و انگلیسی. می‌توانید هر حرکت را مشاهده کرده و مستقیماً با یک کلیک به برنامه روزانه خود اضافه کنید!
+              همهٔ حرکات رایگان اینجا هستند؛ هر کدام را که خواستید انتخاب کنید و به برنامهٔ روزانه اضافه کنید. بدون API key.
             </p>
           </div>
 
@@ -486,7 +486,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
               type="text"
               value={mwSearchTerm}
               onChange={(e) => setMwSearchTerm(e.target.value)}
-              placeholder="جستجوی حرکت در MuscleWiki (مثلاً: Bicep Curl, Bench Press, Squat, سینه...)"
+              placeholder="جستجوی حرکت (مثلاً: Bench Press, Squat, Curl...)"
               className="w-full pl-4 pr-11 py-3 bg-[#121212] border border-neutral-800 rounded-2xl text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-[#D1FF00] shadow-lg transition"
             />
           </div>
@@ -535,7 +535,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
           {isLoadingMw && (
             <div className="py-12 text-center text-xs text-neutral-400 flex items-center justify-center gap-2">
               <Sparkles className="w-5 h-5 text-[#D1FF00] animate-spin" />
-              <span>در حال فراخوانی MuscleWiki API...</span>
+              <span>در حال بارگذاری کاتالوگ...</span>
             </div>
           )}
 
@@ -547,7 +547,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
 
           {!isLoadingMw && !mwFetchError && mwExercises.length === 0 && (
             <div className="p-4 rounded-2xl border border-neutral-800 bg-neutral-900/50 text-neutral-400 text-sm text-center">
-              حرکتی از MuscleWiki پیدا نشد.
+              حرکتی در کاتالوگ پیدا نشد.
             </div>
           )}
 
@@ -571,7 +571,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
                       />
 
                       <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-slate-950/80 backdrop-blur-md text-[10px] text-[#D1FF00] font-bold border border-[#D1FF00]/20">
-                        MuscleWiki API
+                        Free DB
                       </span>
 
                       {mwEx.difficultyFa && (
@@ -642,10 +642,10 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({
                 </div>
                 <div>
                   <h3 className="text-base font-extrabold text-white flex items-center gap-2">
-                    پنل تست زنده، دیباگر و مانیتورینگ MuscleWiki API
+                    پنل تست کاتالوگ رایگان
                   </h3>
                   <p className="text-xs text-neutral-400">
-                    بررسی تمام داده‌های دریافتی از MuscleWiki API + دریافت و تست مستقیم ویدیوها
+                    بررسی پاسخ سرور از کاتالوگ محلی + لینک تصاویر CDN
                   </p>
                 </div>
               </div>

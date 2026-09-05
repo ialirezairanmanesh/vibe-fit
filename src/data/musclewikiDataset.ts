@@ -18,7 +18,7 @@ export interface MuscleWikiExercise {
   defaultSets?: number;
   defaultReps?: string;
   defaultRestSeconds?: number;
-  source?: 'MuscleWiki API' | string;
+  source?: 'Free Exercise DB' | 'MuscleWiki API' | string;
 }
 
 export const MUSCLEWIKI_CATEGORIES = [
