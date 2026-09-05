@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { getCustomAiConfig } from '../utils/aiConfig';
-import { RoutineDay } from '../types';
+import { RoutineDay, UserProfile } from '../types';
 import {
   saveChatSessionsPersistent,
   loadChatSessionsPersistent,
   clearChatHistoryPersistent,
   loadChatHistoryPersistent,
+  loadUserChatSessionsPersistent,
+  saveUserChatSessionsPersistent,
   ChatSession
 } from '../utils/dbStorage';
 import {
@@ -36,6 +38,7 @@ import {
 interface AICoachManagerProps {
   routines: RoutineDay[];
   onApplyOptimizedRoutines: (newRoutines: RoutineDay[]) => void;
+  activeUser?: UserProfile;
 }
 
 interface AnalysisResult {
@@ -63,20 +66,34 @@ interface ChatMessage {
 
 export const AICoachManager: React.FC<AICoachManagerProps> = ({
   routines,
-  onApplyOptimizedRoutines
+  onApplyOptimizedRoutines,
+  activeUser
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'audit' | 'chat'>('audit');
-  const [userGoal, setUserGoal] = useState<string>('عضله‌سازی و افزایش حجم خشک (Hypertrophy)');
-  const [userExperience, setUserExperience] = useState<string>('متوسط (۱ الی ۳ سال سابقه)');
+  const [userGoal, setUserGoal] = useState<string>(activeUser?.goal || 'عضله‌سازی و افزایش حجم خشک (Hypertrophy)');
+  const [userExperience, setUserExperience] = useState<string>(
+    activeUser?.experienceLevel ? `${activeUser.experienceLevel}` : 'متوسط (۱ الی ۳ سال سابقه)'
+  );
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
+  // Sync with activeUser when user switches
+  useEffect(() => {
+    if (activeUser?.goal) {
+      setUserGoal(activeUser.goal);
+    }
+    if (activeUser?.experienceLevel) {
+      setUserExperience(activeUser.experienceLevel);
+    }
+  }, [activeUser?.id, activeUser?.goal, activeUser?.experienceLevel]);
+
   const DEFAULT_WELCOME_MSG: ChatMessage = {
     id: 'welcome',
     role: 'assistant',
-    content:
-      'سلام ورزشکار عزیز! 👋 من مربی هوشمند AI شما هستم. می‌تونم برنامه‌تون رو بر اساس اصول علوم ورزشی آنالیز کنم، حجم هر عضله رو چک کنم یا به سوالات تغذیه، مکمل‌ها و فرم حرکات پاسخ بدم. چه کمکی می‌تونم بکنم؟',
+    content: activeUser?.name
+      ? `سلام ${activeUser.name} عزیز! 👋 من مربی هوشمند AI شما هستم. با توجه به مشخصات و هدف ورزشی شما (${activeUser.goal || 'تناسب اندام'})، می‌تونم برنامه‌تون رو آنالیز کنم، حجم هر عضله رو ارزیابی کنم و به سوالات تمرین و تغذیه‌ات پاسخ بدم.`
+      : 'سلام ورزشکار عزیز! 👋 من مربی هوشمند AI شما هستم. می‌تونم برنامه‌تون رو بر اساس اصول علوم ورزشی آنالیز کنم، حجم هر عضله رو چک کنم یا به سوالات تغذیه، مکمل‌ها و فرم حرکات پاسخ بدم. چه کمکی می‌تونم بکنم؟',
     timestamp: '۱۰:۰۰'
   };
 
@@ -118,10 +135,19 @@ export const AICoachManager: React.FC<AICoachManagerProps> = ({
   // Active Session computation
   const activeSession = chatSessions.find((s) => s.id === activeSessionId) || chatSessions[0] || INITIAL_SESSIONS[0];
 
-  // Load persistent chat sessions on mount
+  // Load persistent chat sessions on mount or when active user changes
   useEffect(() => {
     let isMounted = true;
-    loadChatSessionsPersistent().then(async (savedSessions) => {
+    const currentUserId = activeUser?.id;
+
+    async function loadSessions() {
+      let savedSessions: ChatSession[] | null = null;
+      if (currentUserId) {
+        savedSessions = await loadUserChatSessionsPersistent(currentUserId);
+      } else {
+        savedSessions = await loadChatSessionsPersistent();
+      }
+
       if (!isMounted) return;
       if (savedSessions && Array.isArray(savedSessions) && savedSessions.length > 0) {
         setChatSessions(savedSessions);
@@ -139,25 +165,40 @@ export const AICoachManager: React.FC<AICoachManagerProps> = ({
           const updated = [migratedSession];
           setChatSessions(updated);
           setActiveSessionId(migratedSession.id);
-          saveChatSessionsPersistent(updated);
+          if (currentUserId) {
+            saveUserChatSessionsPersistent(currentUserId, updated);
+          } else {
+            saveChatSessionsPersistent(updated);
+          }
         } else {
           setChatSessions(INITIAL_SESSIONS);
           setActiveSessionId(INITIAL_SESSIONS[0].id);
-          saveChatSessionsPersistent(INITIAL_SESSIONS);
+          if (currentUserId) {
+            saveUserChatSessionsPersistent(currentUserId, INITIAL_SESSIONS);
+          } else {
+            saveChatSessionsPersistent(INITIAL_SESSIONS);
+          }
         }
       }
-    });
+    }
+
+    loadSessions();
+
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [activeUser?.id]);
 
   // Auto-save chat sessions whenever updated
   useEffect(() => {
     if (chatSessions && chatSessions.length > 0) {
-      saveChatSessionsPersistent(chatSessions);
+      if (activeUser?.id) {
+        saveUserChatSessionsPersistent(activeUser.id, chatSessions);
+      } else {
+        saveChatSessionsPersistent(chatSessions);
+      }
     }
-  }, [chatSessions]);
+  }, [chatSessions, activeUser?.id]);
 
   // Create New Session
   const handleCreateNewSession = () => {
