@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { RoutineDay, Exercise } from '../types';
-import { parseWorkoutText, SAMPLE_WORKOUT_TEXT, inferExerciseMetadata } from '../utils/workoutTextParser';
+import { parseWorkoutText, SAMPLE_WORKOUT_TEXT } from '../utils/workoutTextParser';
 import { getCustomAiConfig } from '../utils/aiConfig';
 import { 
   X, 
@@ -8,12 +8,10 @@ import {
   Sparkles, 
   CheckCircle2, 
   Layers, 
-  Dumbbell, 
   ArrowRight, 
   Trash2, 
   Edit3, 
   Plus, 
-  Zap, 
   Info,
   RotateCcw
 } from 'lucide-react';
@@ -38,60 +36,64 @@ export const RawTextProgramModal: React.FC<RawTextProgramModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Insert sample workout text
   const handleLoadSample = () => {
     setRawText(SAMPLE_WORKOUT_TEXT);
   };
 
-  // Parse text using Server-Side Gemini API with local fallback
-  const handleParseText = async () => {
+  const applyParsed = (routines: RoutineDay[]) => {
+    if (routines.length === 0) {
+      alert('متن وارد شده قابل شناسایی نبود.');
+      return;
+    }
+    setParsedRoutines(routines);
+    setActiveStep('preview');
+  };
+
+  const handleParseLocal = () => {
+    if (!rawText.trim()) {
+      alert('لطفاً ابتدا متن برنامه تمرینی خود را وارد یا پیست کنید.');
+      return;
+    }
+    applyParsed(parseWorkoutText(rawText));
+  };
+
+  const handleParseAi = async () => {
     if (!rawText.trim()) {
       alert('لطفاً ابتدا متن برنامه تمرینی خود را وارد یا پیست کنید.');
       return;
     }
 
     setIsAiLoading(true);
-
     try {
       const res = await fetch('/api/gemini/parse-workout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rawText, customAiConfig: getCustomAiConfig() })
       });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.routines && Array.isArray(data.routines) && data.routines.length > 0) {
-          // Normalize IDs if missing
-          const normalized: RoutineDay[] = data.routines.map((r: any, idx: number) => ({
-            ...r,
-            id: r.id || `ai-day-${Date.now()}-${idx + 1}`,
-            exercises: (r.exercises || []).map((ex: any, exIdx: number) => ({
-              ...ex,
-              id: ex.id || `ai-ex-${Date.now()}-${idx}-${exIdx}`,
-              defaultRestSeconds: ex.defaultRestSeconds || 75
-            }))
-          }));
-
-          setParsedRoutines(normalized);
-          setActiveStep('preview');
-          setIsAiLoading(false);
-          return;
-        }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || `HTTP ${res.status}`);
       }
-    } catch (err) {
-      console.warn('AI Parsing failed or offline, falling back to local parser:', err);
+      if (!Array.isArray(data.routines) || data.routines.length === 0) {
+        throw new Error('هوش مصنوعی برنامه‌ای استخراج نکرد.');
+      }
+      applyParsed(
+        data.routines.map((r: any, idx: number) => ({
+          ...r,
+          id: r.id || `ai-day-${Date.now()}-${idx + 1}`,
+          exercises: (r.exercises || []).map((ex: any, exIdx: number) => ({
+            ...ex,
+            id: ex.id || `ai-ex-${Date.now()}-${idx}-${exIdx}`,
+            defaultRestSeconds: ex.defaultRestSeconds || 75
+          }))
+        }))
+      );
+    } catch (err: any) {
+      console.warn('AI Parsing failed:', err);
+      alert(err?.message || 'پردازش با هوش مصنوعی ناموفق بود. کلید API را در تنظیمات بررسی کنید.');
+    } finally {
+      setIsAiLoading(false);
     }
-
-    // Fallback to local parser
-    const localResult = parseWorkoutText(rawText);
-    if (localResult.length === 0) {
-      alert('متن وارد شده قابل شناسایی نبود. لطفاً از فرمت نمونه استفاده کنید.');
-    } else {
-      setParsedRoutines(localResult);
-      setActiveStep('preview');
-    }
-    setIsAiLoading(false);
   };
 
   // Delete exercise from preview
@@ -189,25 +191,36 @@ export const RawTextProgramModal: React.FC<RawTextProgramModalProps> = ({
                 </p>
               </div>
 
-              {/* Parse Button */}
-              <button
-                type="button"
-                onClick={handleParseText}
-                disabled={isAiLoading}
-                className="w-full py-3.5 px-4 rounded-2xl bg-[#D1FF00] hover:bg-[#b8e600] active:scale-[0.99] text-[#0A0A0A] font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#D1FF00]/15 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isAiLoading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                    <span>هوش مصنوعی Gemini در حال تحلیل و تطبیق فیلم حرکات...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4" />
-                    <span>پردازش و استخراج هوشمند برنامه جدید با Gemini</span>
-                  </>
-                )}
-              </button>
+              {/* Parse buttons: local vs AI */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleParseLocal}
+                  disabled={isAiLoading}
+                  className="py-3.5 px-4 rounded-2xl bg-neutral-900 hover:bg-neutral-800 active:scale-[0.99] text-neutral-100 font-bold text-sm flex items-center justify-center gap-2 border border-neutral-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <FileText className="w-4 h-4 text-[#D1FF00]" />
+                  <span>پردازش محلی (بدون AI)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleParseAi}
+                  disabled={isAiLoading}
+                  className="py-3.5 px-4 rounded-2xl bg-[#D1FF00] hover:bg-[#b8e600] active:scale-[0.99] text-[#0A0A0A] font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#D1FF00]/15 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isAiLoading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                      <span>در حال تحلیل با AI...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      <span>پردازش با هوش مصنوعی</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           )}
 

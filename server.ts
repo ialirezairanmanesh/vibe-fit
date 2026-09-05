@@ -279,100 +279,96 @@ async function startServer() {
       }
 
       const systemInstruction = `
-You are an expert fitness coach and exercise scientist specializing in bodybuilding, weightlifting, and Persian workout program analysis.
-Your job is to parse raw workout program text in Persian or English, identify all training days, and break down every exercise accurately.
+You are an expert fitness coach parsing raw workout programs in Persian or English (Telegram/coach messages, messy formatting OK).
 
-CRITICAL INSTRUCTION FOR EXERCISE ANIMATION MATCHING:
-For every exercise identified, set nameEn to the closest standard English MuscleWiki exercise name (e.g. "Barbell Bench Press"). Media is resolved later via the MuscleWiki API — do not invent local GIF filenames.
+SETS × REPS — CRITICAL (never guess defaults when the text says otherwise):
+- "۳*۱۲" / "3x12" / "3×12" / "3 * 12" → targetSets=3, targetReps="12"
+- "۴ ست ۱۲ تایی" / "4 ست 10-12" → targetSets=4, targetReps="12" or "10-12"
+- "سه ست دوازده تایی" / "سه ست × دوازده" → targetSets=3, targetReps="12"
+- "۱۲ تایی ۳ ست" → targetSets=3, targetReps="12"
+- "12-10-8-6" pyramid → targetSets=4, targetReps="12-10-8-6"
+- Persian number-words: یک=1 دو=2 سه=3 چهار=4 پنج=5 شش=6 هفت=7 هشت=8 نه=9 ده=10 یازده=11 دوازده=12 پانزده=15 بیست=20
+- Bullet lines like "* سه ست دوازده تایی" under an exercise name apply to that exercise.
+- If a line has ONLY sets/reps and no exercise name, attach it to the previous exercise.
+- Only use default 3×10-12 when the text truly has no sets/reps info.
 
-Categories must be one of: "chest", "back", "shoulders", "biceps", "triceps", "legs", "abs".
-Animation Types must be one of: "dumbbell_press", "incline_press", "fly", "pullover", "bicep_curl", "hammer_curl", "preacher_curl", "crunch", "leg_extension", "squat", "leg_curl", "calf_raise", "triceps_pushdown", "skullcrusher", "triceps_vbar", "front_raise", "shoulder_press", "rear_fly", "lat_pulldown", "dumbbell_row", "reverse_pulldown", "hyperextension".
+DAYS: Detect روز/جلسه/شنبه…/Day headers. Do NOT treat "*" or "-" bullets as new days.
 
-Example mappings:
-- "پرس سینه" -> nameEn: "Dumbbell_Bench_Press", category: "chest", animationType: "dumbbell_press"
-- "پرس بالا سینه / پرس بالا سینه دمبل" -> nameEn: "Incline_Dumbbell_Press", category: "chest", animationType: "incline_press"
-- "پرس بالا سینه دستگاه / دستگاه بالاسینه / پرس بالاسینه دستگاه" -> nameEn: "Incline_Chest_Press", category: "chest", animationType: "incline_press"
-- "قفسه سینه / فلای" -> nameEn: "Chest_Fly", category: "chest", animationType: "fly"
-- "قفسه بالا سینه" -> nameEn: "Incline_Dumbbell_Fly", category: "chest", animationType: "fly"
-- "پلاور" -> nameEn: "Dumbbell_Pullover", category: "chest", animationType: "pullover"
-- "جلو بازو لاری" -> nameEn: "EZ_Bar_Preacher_Curl", category: "biceps", animationType: "preacher_curl"
-- "جلو بازو چکشی" -> nameEn: "Dumbbell_Hammer_Curl", category: "biceps", animationType: "hammer_curl"
-- "پشت بازو هالتر خوابیده / اسکال کراچر / فرانسوی" -> nameEn: "Lying_Triceps_Extension", category: "triceps", animationType: "skullcrusher"
-- "پشت بازو طناب یا V" -> nameEn: "V_Bar_Triceps_Pushdown", category: "triceps", animationType: "triceps_vbar"
-- "پشت بازو سیمکش" -> nameEn: "Triceps_Pushdown", category: "triceps", animationType: "triceps_pushdown"
-- "نشر خم / پشت سرشانه" -> nameEn: "Bent_Over_Rear_Delt_Fly", category: "shoulders", animationType: "rear_fly"
-- "نشر جلو" -> nameEn: "Cable_Front_Raise", category: "shoulders", animationType: "front_raise"
-- "پرس سرشانه" -> nameEn: "Dumbbell_Shoulder_Press", category: "shoulders", animationType: "shoulder_press"
-- "سرشانه دستگاه / پرس سرشانه دستگاه" -> nameEn: "Machine_Shoulder_Press", category: "shoulders", animationType: "shoulder_press"
-- "زیر بغل سیمکش / لتبک" -> nameEn: "Lat_Pulldown", category: "back", animationType: "lat_pulldown"
-- "زیر بغل مچ معکوس" -> nameEn: "Reverse_Grip_Lat_Pulldown", category: "back", animationType: "reverse_pulldown"
-- "زیر بغل دمبل خم / قایقی" -> nameEn: "Bent_Over_Dumbbell_Row", category: "back", animationType: "dumbbell_row"
-- "فیله کمر" -> nameEn: "Back_Extension", category: "back", animationType: "hyperextension"
-- "اسکات" -> nameEn: "Barbell_Squat", category: "legs", animationType: "squat"
-- "جلو پا" -> nameEn: "Leg_Extension", category: "legs", animationType: "leg_extension"
-- "پشت پا" -> nameEn: "Lying_Leg_Curl", category: "legs", animationType: "leg_curl"
-- "ساق پا" -> nameEn: "Seated_Calf_Raise", category: "legs", animationType: "calf_raise"
-- "کرانچ / شکم" -> nameEn: "Crunch", category: "abs", animationType: "crunch"
+EXERCISE NAMES: Keep natural Persian nameFa. Set nameEn to closest standard English exercise name (e.g. "Lat Pulldown" for لت/زیربغل سیمکش). Categories: chest|back|shoulders|biceps|triceps|legs|abs.
+animationType: one of dumbbell_press, incline_press, fly, pullover, bicep_curl, hammer_curl, preacher_curl, crunch, leg_extension, squat, leg_curl, calf_raise, triceps_pushdown, skullcrusher, triceps_vbar, front_raise, shoulder_press, rear_fly, lat_pulldown, dumbbell_row, reverse_pulldown, hyperextension.
 
-Provide step-by-step instructions (instructionsFa) and tips (tipsFa) in Persian for each exercise.
+Return JSON object: {"routines":[...]} — no markdown fences.
 `;
 
       const jsonOutputSchema = {
-        type: Type.ARRAY,
-        description: "List of routine days parsed from text",
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            id: { type: Type.STRING },
-            titleFa: { type: Type.STRING, description: "Title in Persian, e.g., روز اول: سینه و جلو بازو" },
-            subtitleFa: { type: Type.STRING, description: "Subtitle describing target muscles in Persian" },
-            targetMusclesFa: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING }
-            },
-            iconName: { type: Type.STRING, description: "Dumbbell, Activity, or Zap" },
-            exercises: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  nameFa: { type: Type.STRING, description: "Persian name of exercise" },
-                  nameEn: { type: Type.STRING, description: "Exact matching English dataset GIF filename, e.g. Incline_Dumbbell_Press" },
-                  category: { type: Type.STRING, description: "chest, back, shoulders, biceps, triceps, legs, abs" },
-                  targetMuscleFa: { type: Type.STRING, description: "Persian target muscle details" },
-                  equipmentFa: { type: Type.STRING, description: "Persian equipment details" },
-                  targetSets: { type: Type.INTEGER, description: "Target sets integer" },
-                  targetReps: { type: Type.STRING, description: "Target reps string e.g. 10 or 10-12" },
-                  defaultRestSeconds: { type: Type.INTEGER, description: "Rest seconds, default 60-90" },
-                  instructionsFa: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING }
-                  },
-                  tipsFa: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING }
-                  },
-                  animationType: { type: Type.STRING }
+        type: Type.OBJECT,
+        properties: {
+          routines: {
+            type: Type.ARRAY,
+            description: "List of routine days parsed from text",
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                id: { type: Type.STRING },
+                titleFa: { type: Type.STRING, description: "Title in Persian, e.g., روز اول: سینه و جلو بازو" },
+                subtitleFa: { type: Type.STRING, description: "Subtitle describing target muscles in Persian" },
+                targetMusclesFa: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING }
                 },
-                required: ["nameFa", "nameEn", "category", "targetMuscleFa", "equipmentFa", "targetSets", "targetReps", "instructionsFa", "animationType"]
-              }
+                iconName: { type: Type.STRING, description: "Dumbbell, Activity, or Zap" },
+                exercises: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      id: { type: Type.STRING },
+                      nameFa: { type: Type.STRING, description: "Persian name of exercise" },
+                      nameEn: { type: Type.STRING, description: "Standard English exercise name, e.g. Lat Pulldown" },
+                      category: { type: Type.STRING, description: "chest, back, shoulders, biceps, triceps, legs, abs" },
+                      targetMuscleFa: { type: Type.STRING, description: "Persian target muscle details" },
+                      equipmentFa: { type: Type.STRING, description: "Persian equipment details" },
+                      targetSets: { type: Type.INTEGER, description: "Parsed sets count — must match text (3 for سه ست / ۳*۱۲)" },
+                      targetReps: { type: Type.STRING, description: "Parsed reps e.g. 12 or 10-12 — must match text" },
+                      defaultRestSeconds: { type: Type.INTEGER, description: "Rest seconds, default 60-90" },
+                      instructionsFa: {
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING }
+                      },
+                      tipsFa: {
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING }
+                      },
+                      animationType: { type: Type.STRING }
+                    },
+                    required: ["nameFa", "nameEn", "category", "targetMuscleFa", "equipmentFa", "targetSets", "targetReps", "instructionsFa", "animationType"]
+                  }
+                }
+              },
+              required: ["titleFa", "targetMusclesFa", "exercises"]
             }
-          },
-          required: ["titleFa", "targetMusclesFa", "exercises"]
-        }
+          }
+        },
+        required: ["routines"]
       };
 
       const rawResultText = await callAiCompletion({
         systemInstruction,
-        userPrompt: `Parse and extract workout routines from this text:\n\n${rawText}`,
+        userPrompt: `Parse this workout text into {"routines":[...]}. Preserve exact sets×reps from every line (including Persian words and 3*12 style):\n\n${rawText}`,
         jsonOutputSchema,
         customAiConfig,
-        temperature: 0.2
+        temperature: 0.1
       });
 
-      const parsedJson = JSON.parse(rawResultText || "[]");
-      return res.json({ routines: parsedJson });
+      const parsedJson = JSON.parse(rawResultText || "{}");
+      const routines = Array.isArray(parsedJson)
+        ? parsedJson
+        : Array.isArray(parsedJson?.routines)
+          ? parsedJson.routines
+          : Array.isArray(parsedJson?.days)
+            ? parsedJson.days
+            : [];
+      return res.json({ routines });
     } catch (error: any) {
       console.error("Error in /api/gemini/parse-workout:", error);
       return res.status(500).json({ error: error.message || "Failed to parse workout with AI." });
