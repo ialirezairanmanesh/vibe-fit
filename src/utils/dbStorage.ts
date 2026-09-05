@@ -1,4 +1,4 @@
-import { RoutineDay, WorkoutSession, ActiveWorkoutState } from '../types';
+import { RoutineDay, WorkoutSession, ActiveWorkoutState, UserProfile } from '../types';
 import { loadFromServer, scheduleServerSync } from './serverSync';
 
 const DB_NAME = 'IranFitnessDB';
@@ -10,6 +10,40 @@ const SESSIONS_KEY = 'fa_workout_sessions_v1';
 const ACTIVE_WORKOUT_KEY = 'fa_active_workout_session_v1';
 const CHAT_HISTORY_KEY = 'fa_workout_chat_history_v1';
 const CHAT_SESSIONS_KEY = 'fa_workout_chat_sessions_v2';
+const USERS_LIST_KEY = 'fa_workout_users_list_v1';
+const ACTIVE_USER_ID_KEY = 'fa_active_user_id_v1';
+
+export const DEFAULT_USER: UserProfile = {
+  id: 'user_default',
+  name: 'ورزشکار ۱',
+  avatarColor: '#D1FF00',
+  gender: 'male',
+  goal: 'عضله‌سازی و هایپرتروفی',
+  experienceLevel: 'متوسط',
+  weightKg: 75,
+  heightCm: 178,
+  createdAt: new Date().toISOString()
+};
+
+export function getUserRoutinesKey(userId: string): string {
+  return `fa_user_${userId}_routines_v1`;
+}
+
+export function getUserSessionsKey(userId: string): string {
+  return `fa_user_${userId}_sessions_v1`;
+}
+
+export function getUserActiveWorkoutKey(userId: string): string {
+  return `fa_user_${userId}_active_workout_v1`;
+}
+
+export function getUserChatSessionsKey(userId: string): string {
+  return `fa_user_${userId}_chat_sessions_v2`;
+}
+
+export function getUserChatHistoryKey(userId: string): string {
+  return `fa_user_${userId}_chat_history_v1`;
+}
 
 export interface ChatSession {
   id: string;
@@ -449,27 +483,338 @@ export async function saveActiveWorkoutPersistent(state: ActiveWorkoutState | nu
   }
 }
 
-export async function loadActiveWorkoutPersistent(): Promise<ActiveWorkoutState | null> {
+export async function loadActiveWorkoutPersistent(userId?: string): Promise<ActiveWorkoutState | null> {
+  const targetKey = userId ? getUserActiveWorkoutKey(userId) : ACTIVE_WORKOUT_KEY;
   let state: ActiveWorkoutState | null = null;
   try {
-    state = await loadFromServer<ActiveWorkoutState>(ACTIVE_WORKOUT_KEY);
+    state = await loadFromServer<ActiveWorkoutState>(targetKey);
   } catch (e) {
     console.warn('Server active workout load error:', e);
   }
   try {
     if (!state) {
-      state = await getItemDB<ActiveWorkoutState>(ACTIVE_WORKOUT_KEY);
+      state = await getItemDB<ActiveWorkoutState>(targetKey);
     }
   } catch (e) {
     console.warn('IndexedDB active workout load error:', e);
   }
   if (!state) {
     try {
-      const saved = localStorage.getItem(ACTIVE_WORKOUT_KEY);
+      const saved = localStorage.getItem(targetKey);
       if (saved) state = JSON.parse(saved) as ActiveWorkoutState;
     } catch {
       state = null;
     }
   }
   return state;
+}
+
+// ==========================================
+// Multi-User Profile & Isolated Device Storage
+// ==========================================
+
+export async function getUsersListPersistent(): Promise<UserProfile[]> {
+  let users: UserProfile[] | null = null;
+  try {
+    users = await getItemDB<UserProfile[]>(USERS_LIST_KEY);
+  } catch (e) {
+    console.warn('IndexedDB users load error:', e);
+  }
+
+  if (!users || !Array.isArray(users) || users.length === 0) {
+    try {
+      const saved = localStorage.getItem(USERS_LIST_KEY);
+      if (saved) users = JSON.parse(saved);
+    } catch {
+      users = null;
+    }
+  }
+
+  if (users && Array.isArray(users) && users.length > 0) {
+    return users;
+  }
+
+  // Initialize first user if none exists
+  const initialUser: UserProfile = {
+    ...DEFAULT_USER,
+    id: 'user_default',
+    createdAt: new Date().toISOString()
+  };
+
+  // Check if legacy data exists in ROUTINES_KEY or SESSIONS_KEY and migrate
+  try {
+    const legacyRoutines =
+      (await getItemDB<RoutineDay[]>(ROUTINES_KEY)) ||
+      (localStorage.getItem(ROUTINES_KEY) ? JSON.parse(localStorage.getItem(ROUTINES_KEY)!) : null);
+    const legacySessions =
+      (await getItemDB<WorkoutSession[]>(SESSIONS_KEY)) ||
+      (localStorage.getItem(SESSIONS_KEY) ? JSON.parse(localStorage.getItem(SESSIONS_KEY)!) : null);
+
+    if (legacyRoutines && Array.isArray(legacyRoutines) && legacyRoutines.length > 0) {
+      await saveUserRoutinesPersistent(initialUser.id, legacyRoutines);
+    }
+    if (legacySessions && Array.isArray(legacySessions) && legacySessions.length > 0) {
+      await saveUserSessionsPersistent(initialUser.id, legacySessions);
+    }
+  } catch (migErr) {
+    console.warn('Legacy data migration notice:', migErr);
+  }
+
+  const initialList = [initialUser];
+  await saveUsersListPersistent(initialList);
+  await setActiveUserIdPersistent(initialUser.id);
+  return initialList;
+}
+
+export async function saveUsersListPersistent(users: UserProfile[]): Promise<void> {
+  await setItemDB(USERS_LIST_KEY, users);
+  try {
+    localStorage.setItem(USERS_LIST_KEY, JSON.stringify(users));
+  } catch (e) {
+    console.warn('localStorage save users error:', e);
+  }
+}
+
+export async function getActiveUserIdPersistent(): Promise<string> {
+  let activeId: string | null = null;
+  try {
+    activeId = await getItemDB<string>(ACTIVE_USER_ID_KEY);
+  } catch (e) {
+    console.warn('getActiveUserId error:', e);
+  }
+  if (!activeId) {
+    activeId = localStorage.getItem(ACTIVE_USER_ID_KEY);
+  }
+  return activeId || 'user_default';
+}
+
+export async function setActiveUserIdPersistent(userId: string): Promise<void> {
+  await setItemDB(ACTIVE_USER_ID_KEY, userId);
+  try {
+    localStorage.setItem(ACTIVE_USER_ID_KEY, userId);
+  } catch (e) {
+    console.warn('localStorage setActiveUserId error:', e);
+  }
+}
+
+export async function saveUserRoutinesPersistent(userId: string, routines: RoutineDay[]): Promise<void> {
+  const key = getUserRoutinesKey(userId);
+  await setItemDB(key, routines);
+  try {
+    localStorage.setItem(key, JSON.stringify(routines));
+  } catch (e) {
+    console.info('localStorage quota note for user routines:', e);
+  }
+
+  // Also sync to legacy ROUTINES_KEY if this is the active user for fallback
+  const activeId = await getActiveUserIdPersistent();
+  if (activeId === userId) {
+    await setItemDB(ROUTINES_KEY, routines);
+    try {
+      localStorage.setItem(ROUTINES_KEY, JSON.stringify(routines));
+    } catch {}
+  }
+}
+
+export async function loadUserRoutinesPersistent(userId: string): Promise<RoutineDay[] | null> {
+  const key = getUserRoutinesKey(userId);
+  let routines: RoutineDay[] | null = null;
+  try {
+    routines = await getItemDB<RoutineDay[]>(key);
+  } catch (e) {
+    console.warn('IndexedDB load user routines error:', e);
+  }
+  if (!routines) {
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) routines = JSON.parse(saved);
+    } catch {
+      routines = null;
+    }
+  }
+  return routines;
+}
+
+export async function saveUserSessionsPersistent(userId: string, sessions: WorkoutSession[]): Promise<void> {
+  const key = getUserSessionsKey(userId);
+  await setItemDB(key, sessions);
+  try {
+    localStorage.setItem(key, JSON.stringify(sessions));
+  } catch (e) {
+    console.info('localStorage quota note for user sessions:', e);
+  }
+
+  const activeId = await getActiveUserIdPersistent();
+  if (activeId === userId) {
+    await setItemDB(SESSIONS_KEY, sessions);
+    try {
+      localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+    } catch {}
+  }
+}
+
+export async function loadUserSessionsPersistent(userId: string): Promise<WorkoutSession[] | null> {
+  const key = getUserSessionsKey(userId);
+  let sessions: WorkoutSession[] | null = null;
+  try {
+    sessions = await getItemDB<WorkoutSession[]>(key);
+  } catch (e) {
+    console.warn('IndexedDB load user sessions error:', e);
+  }
+  if (!sessions) {
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) sessions = JSON.parse(saved);
+    } catch {
+      sessions = null;
+    }
+  }
+  return sessions;
+}
+
+export async function saveUserActiveWorkoutPersistent(userId: string, state: ActiveWorkoutState | null): Promise<void> {
+  const key = getUserActiveWorkoutKey(userId);
+  if (state === null) {
+    await setItemDB(key, null);
+    try {
+      localStorage.removeItem(key);
+    } catch {}
+  } else {
+    await setItemDB(key, state);
+    try {
+      localStorage.setItem(key, JSON.stringify(state));
+    } catch {}
+  }
+}
+
+export async function loadUserActiveWorkoutPersistent(userId: string): Promise<ActiveWorkoutState | null> {
+  return loadActiveWorkoutPersistent(userId);
+}
+
+export async function saveUserChatSessionsPersistent(userId: string, sessions: ChatSession[]): Promise<void> {
+  const key = getUserChatSessionsKey(userId);
+  await setItemDB(key, sessions);
+  try {
+    localStorage.setItem(key, JSON.stringify(sessions));
+  } catch {}
+}
+
+export async function loadUserChatSessionsPersistent(userId: string): Promise<ChatSession[] | null> {
+  const key = getUserChatSessionsKey(userId);
+  let sessions: ChatSession[] | null = null;
+  try {
+    sessions = await getItemDB<ChatSession[]>(key);
+  } catch (e) {
+    console.warn('IndexedDB sessions load error:', e);
+  }
+  if (!sessions) {
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) sessions = JSON.parse(saved);
+    } catch {
+      sessions = null;
+    }
+  }
+  return sessions;
+}
+
+export async function clearUserChatHistoryPersistent(userId: string): Promise<void> {
+  const keySessions = getUserChatSessionsKey(userId);
+  const keyHistory = getUserChatHistoryKey(userId);
+  await setItemDB(keySessions, null);
+  await setItemDB(keyHistory, null);
+  try {
+    localStorage.removeItem(keySessions);
+    localStorage.removeItem(keyHistory);
+  } catch {}
+}
+
+export async function deleteUserPersistent(userId: string): Promise<void> {
+  const keys = [
+    getUserRoutinesKey(userId),
+    getUserSessionsKey(userId),
+    getUserActiveWorkoutKey(userId),
+    getUserChatSessionsKey(userId),
+    getUserChatHistoryKey(userId)
+  ];
+  for (const k of keys) {
+    try {
+      await setItemDB(k, null);
+      localStorage.removeItem(k);
+    } catch {}
+  }
+  const users = await getUsersListPersistent();
+  const filtered = users.filter((u) => u.id !== userId);
+  await saveUsersListPersistent(filtered);
+}
+
+export interface FullDeviceExportData {
+  version: '2.0_multi_user';
+  deviceExportedAt: string;
+  activeUserId: string;
+  users: Array<{
+    profile: UserProfile;
+    routines: RoutineDay[];
+    pastSessions: WorkoutSession[];
+    chatSessions?: ChatSession[];
+  }>;
+}
+
+export async function exportAllUsersFullDeviceData(): Promise<FullDeviceExportData> {
+  const users = await getUsersListPersistent();
+  const activeId = await getActiveUserIdPersistent();
+
+  const exportedUsers = [];
+  for (const u of users) {
+    const userRoutines = (await loadUserRoutinesPersistent(u.id)) || [];
+    const userSessions = (await loadUserSessionsPersistent(u.id)) || [];
+    const userChatSessions = (await loadUserChatSessionsPersistent(u.id)) || [];
+
+    exportedUsers.push({
+      profile: u,
+      routines: userRoutines,
+      pastSessions: userSessions,
+      chatSessions: userChatSessions
+    });
+  }
+
+  return {
+    version: '2.0_multi_user',
+    deviceExportedAt: new Date().toISOString(),
+    activeUserId: activeId,
+    users: exportedUsers
+  };
+}
+
+export async function importAllUsersFullDeviceData(data: FullDeviceExportData): Promise<number> {
+  if (!data || !data.users || !Array.isArray(data.users)) {
+    throw new Error('قالب فایل پشتیبان چندکاربره نامعتبر است.');
+  }
+
+  const existingUsers = await getUsersListPersistent();
+  const existingMap = new Map(existingUsers.map((u) => [u.id, u]));
+
+  for (const item of data.users) {
+    if (!item.profile || !item.profile.id) continue;
+    existingMap.set(item.profile.id, item.profile);
+
+    if (item.routines && Array.isArray(item.routines)) {
+      await saveUserRoutinesPersistent(item.profile.id, item.routines);
+    }
+    if (item.pastSessions && Array.isArray(item.pastSessions)) {
+      await saveUserSessionsPersistent(item.profile.id, item.pastSessions);
+    }
+    if (item.chatSessions && Array.isArray(item.chatSessions)) {
+      await saveUserChatSessionsPersistent(item.profile.id, item.chatSessions);
+    }
+  }
+
+  const mergedUsers = Array.from(existingMap.values());
+  await saveUsersListPersistent(mergedUsers);
+
+  if (data.activeUserId && existingMap.has(data.activeUserId)) {
+    await setActiveUserIdPersistent(data.activeUserId);
+  }
+
+  return data.users.length;
 }

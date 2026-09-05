@@ -99,4 +99,16 @@ export interface RoutineDay {
   exercises: Exercise[];
 }
 
+export interface UserProfile {
+  id: string;
+  name: string;
+  avatarColor: string;
+  gender?: 'male' | 'female';
+  goal?: string; // e.g. 'عضله‌سازی و هایپرتروفی', 'کاهش وزن و چربی‌سوزی', 'افزایش قدرت', 'تناسب اندام عمومی'
+  experienceLevel?: 'مبتدی' | 'متوسط' | 'پیشرفته';
+  weightKg?: number;
+  heightCm?: number;
+  createdAt: string;
+}
+
 export type ActiveTab = 'routines' | 'progress' | 'exercises' | 'history' | 'ai_coach' | 'settings';
