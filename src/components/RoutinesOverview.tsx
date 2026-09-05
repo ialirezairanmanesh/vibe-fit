@@ -248,6 +248,40 @@ export const RoutinesOverview: React.FC<RoutinesOverviewProps> = ({
     }
   };
 
+  // Add brand new routine day
+  const handleAddNewDay = () => {
+    if (!onUpdateRoutines) return;
+    const dayNumber = routines.length + 1;
+    const newDay: RoutineDay = {
+      id: `day_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      titleFa: `روز ${dayNumber} - تمرین جدید`,
+      subtitleFa: 'عضلات هدف و حرکات این جلسه',
+      targetMusclesFa: ['عمومی'],
+      iconName: 'Dumbbell',
+      exercises: []
+    };
+    onUpdateRoutines([...routines, newDay]);
+    setEditingRoutineId(newDay.id);
+    setRoutineTitleFa(newDay.titleFa);
+    setRoutineSubtitleFa(newDay.subtitleFa);
+    setRoutineMusclesFa('عمومی');
+  };
+
+  // Delete a specific routine day
+  const handleDeleteRoutineDay = (routineId: string) => {
+    if (!onUpdateRoutines) return;
+    if (!confirm('آیا از حذف این روز تمرینی اطمینان دارید؟')) return;
+    const updated = routines.filter((r) => r.id !== routineId);
+    onUpdateRoutines(updated);
+  };
+
+  // Clear all routines
+  const handleClearAllRoutines = () => {
+    if (!onUpdateRoutines) return;
+    if (!confirm('آیا از پاکسازی و حذف کامل برنامه‌های تمرینی این کاربر اطمینان دارید؟')) return;
+    onUpdateRoutines([]);
+  };
+
   // Find last completed workout
   const lastSession = pastSessions
     .filter((s) => s.isCompleted)
@@ -262,7 +296,9 @@ export const RoutinesOverview: React.FC<RoutinesOverviewProps> = ({
         <div className="relative space-y-2">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-[#D1FF00] animate-pulse"></span>
-            <span className="text-xs font-bold text-[#D1FF00] tracking-wide uppercase">برنامه تخصصی ۳ روزه</span>
+            <span className="text-xs font-bold text-[#D1FF00] tracking-wide uppercase">
+              {routines.length > 0 ? `برنامه تمرینی (${routines.length} روز)` : 'بدون برنامه پیش‌فرض'}
+            </span>
           </div>
 
           <h2 className="text-xl sm:text-2xl font-extrabold text-neutral-100">
@@ -270,7 +306,9 @@ export const RoutinesOverview: React.FC<RoutinesOverviewProps> = ({
           </h2>
 
           <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed max-w-xl">
-            برنامه تمرینی با پویانمایی حرکات بارگذاری شده است. می‌توانید هر زمان روی عنوان یا نام هر حرکت کلیک کنید و مستقیماً تغییرات دهید.
+            {routines.length > 0
+              ? 'برنامه تمرینی با پویانمایی حرکات بارگذاری شده است. می‌توانید هر زمان روی عنوان یا نام هر حرکت کلیک کنید و مستقیماً تغییرات دهید.'
+              : 'هیچ برنامه پیش‌فرضی وجود ندارد. می‌توانید برنامه اختصاصی مربی خود را از روی متن پیام پیست کنید یا روزهای تمرینی را دستی بسازید.'}
           </p>
 
           <div className="pt-2 flex items-center gap-2.5 flex-wrap">
@@ -326,9 +364,43 @@ export const RoutinesOverview: React.FC<RoutinesOverviewProps> = ({
         </span>
       </div>
 
-      {/* Routine Day Cards List */}
-      <div className="space-y-5">
-        {routines.map((routine) => {
+      {/* Routine Day Cards List or Empty State */}
+      {routines.length === 0 ? (
+        <div className="bg-[#121212] border border-dashed border-neutral-800 rounded-3xl p-8 sm:p-10 text-center space-y-4 shadow-xl">
+          <div className="w-16 h-16 mx-auto rounded-3xl bg-[#D1FF00]/10 border border-[#D1FF00]/25 text-[#D1FF00] flex items-center justify-center shadow-lg shadow-[#D1FF00]/10">
+            <Layers className="w-8 h-8" />
+          </div>
+
+          <div className="space-y-1.5 max-w-md mx-auto">
+            <h4 className="text-base sm:text-lg font-bold text-neutral-100">
+              هنوز برنامه تمرینی ثبت نشده است
+            </h4>
+            <p className="text-xs text-neutral-400 leading-relaxed">
+              هیچ برنامه تمرینی پیش‌فرضی بارگذاری نشده است. می‌توانید با ورود متن برنامه مربی به سرعت برنامه خود را بسازید یا اولین روز تمرین را دستی اضافه کنید.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-3">
+            <button
+              onClick={onOpenTextImporter}
+              className="w-full sm:w-auto py-3 px-5 rounded-2xl bg-[#D1FF00] hover:bg-[#b8e600] active:scale-95 text-[#0A0A0A] font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#D1FF00]/20 transition"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>ورود برنامه از متن کامل (مربی / تلگرام)</span>
+            </button>
+
+            <button
+              onClick={handleAddNewDay}
+              className="w-full sm:w-auto py-3 px-5 rounded-2xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-200 font-bold text-xs flex items-center justify-center gap-2 transition"
+            >
+              <Plus className="w-4 h-4 text-[#D1FF00]" />
+              <span>افزودن دستی اولین روز تمرین</span>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {routines.map((routine) => {
           const isHeaderEditing = editingRoutineId === routine.id;
 
           return (
@@ -425,6 +497,14 @@ export const RoutinesOverview: React.FC<RoutinesOverviewProps> = ({
                       title="ویرایش عنوان و عضلات این روز"
                     >
                       <Edit3 className="w-4 h-4" />
+                    </button>
+
+                    <button
+                      onClick={() => handleDeleteRoutineDay(routine.id)}
+                      className="p-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-rose-400 border border-neutral-800 transition"
+                      title="حذف این روز تمرینی"
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </button>
 
                     <button
@@ -672,7 +752,27 @@ export const RoutinesOverview: React.FC<RoutinesOverviewProps> = ({
             </div>
           );
         })}
+
+        {/* Action Row for Routines: Add Day & Clear */}
+        <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+          <button
+            onClick={handleAddNewDay}
+            className="flex-1 w-full py-3 px-4 rounded-2xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 hover:border-[#D1FF00]/50 text-neutral-200 font-bold text-xs flex items-center justify-center gap-2 transition shadow-md"
+          >
+            <Plus className="w-4 h-4 text-[#D1FF00]" />
+            <span>افزودن روز تمرینی جدید</span>
+          </button>
+          <button
+            onClick={handleClearAllRoutines}
+            className="py-3 px-4 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 font-bold text-xs flex items-center justify-center gap-2 transition shrink-0"
+            title="پاکسازی تمام روزها و شروع برنامه تازه"
+          >
+            <Trash2 className="w-4 h-4 text-rose-400" />
+            <span>پاکسازی کل روزهای برنامه</span>
+          </button>
+        </div>
       </div>
+    )}
 
       {/* Exercise Detail Modal */}
       <ExerciseDetailModal
