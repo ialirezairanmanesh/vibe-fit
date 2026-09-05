@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Exercise } from '../types';
-import { MuscleWikiExercise, MUSCLEWIKI_EXERCISES_DATABASE, findBestMuscleWikiExercise } from '../data/musclewikiDataset';
+import { MuscleWikiExercise } from '../data/musclewikiDataset';
 import { ExerciseAnimation } from './ExerciseAnimation';
 import { MuscleWikiDiagnostic } from './MuscleWikiDiagnostic';
 import { 
@@ -28,18 +28,17 @@ interface MuscleWikiDetailModalProps {
   onApplyToExercise?: (mwData: { gifUrl: string; instructionsFa: string[]; tipsFa: string[]; nameEn: string }) => void;
 }
 
+function isMuscleWikiExercise(ex: Exercise | MuscleWikiExercise): ex is MuscleWikiExercise {
+  return 'gifUrl' in ex && ('source' in ex || 'sideGifUrl' in ex || 'instructionsEn' in ex);
+}
+
 export const MuscleWikiDetailModal: React.FC<MuscleWikiDetailModalProps> = ({
   exercise,
   onClose,
   onApplyToExercise
 }) => {
-  // Synchronously compute initial best match so there is ZERO flash of wrong exercises
-  const initialMatch = useMemo(() => {
-    if (!exercise) return null;
-    return findBestMuscleWikiExercise(exercise);
-  }, [exercise]);
-
-  const [matchedMwExercise, setMatchedMwExercise] = useState<MuscleWikiExercise | null>(initialMatch);
+  const [matchedMwExercise, setMatchedMwExercise] = useState<MuscleWikiExercise | null>(null);
+  const [isResolving, setIsResolving] = useState(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [searchResults, setSearchResults] = useState<MuscleWikiExercise[]>([]);
   const [isSearching, setIsSearching] = useState<boolean>(false);
@@ -53,76 +52,92 @@ export const MuscleWikiDetailModal: React.FC<MuscleWikiDetailModalProps> = ({
   useEffect(() => {
     if (!exercise) return;
 
-    // Reset angle when changing exercise
     setActiveAngle('front');
-
-    // Instantly set the precise synchronous match
-    const bestMatch = findBestMuscleWikiExercise(exercise);
-    setMatchedMwExercise(bestMatch);
     setSearchQuery('');
     setSearchResults([]);
+
+    // Already a MuscleWiki API exercise (from library) — use as-is
+    if (isMuscleWikiExercise(exercise) && exercise.gifUrl?.includes('/api/proxy-media')) {
+      setMatchedMwExercise(exercise);
+      return;
+    }
+    if (isMuscleWikiExercise(exercise) && exercise.source === 'MuscleWiki API') {
+      setMatchedMwExercise(exercise);
+      return;
+    }
+
+    let cancelled = false;
+    setIsResolving(true);
+    const q = ('nameEn' in exercise && exercise.nameEn) || ('nameFa' in exercise && exercise.nameFa) || '';
+    const category = ('category' in exercise && exercise.category) || '';
+
+    fetch(`/api/musclewiki/exercises?q=${encodeURIComponent(String(q))}&category=${encodeURIComponent(String(category))}`)
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+        return data;
+      })
+      .then((data) => {
+        if (cancelled) return;
+        const list = Array.isArray(data?.exercises) ? data.exercises : [];
+        setMatchedMwExercise(list[0] || null);
+      })
+      .catch((err) => {
+        console.warn('[MuscleWikiDetailModal] API match failed:', err);
+        if (!cancelled) setMatchedMwExercise(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsResolving(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [exercise]);
 
-  // Live search in MuscleWiki database
   const handleSearch = async (query: string) => {
     setSearchQuery(query);
-    const qLower = query.toLowerCase().trim();
+    const qLower = query.trim();
     if (!qLower) {
       setSearchResults([]);
       return;
     }
 
-    // 1. Instant local search with smart ranking
-    const localFiltered = MUSCLEWIKI_EXERCISES_DATABASE.filter((ex) => {
-      const en = ex.nameEn.toLowerCase();
-      const fa = ex.nameFa.toLowerCase();
-      const target = ex.targetMuscleFa.toLowerCase();
-      const eq = ex.equipmentFa.toLowerCase();
-      return en.includes(qLower) || fa.includes(qLower) || target.includes(qLower) || eq.includes(qLower);
-    });
-
-    setSearchResults(localFiltered);
-
-    // 2. Optionally query server for any additional dynamic items
+    setIsSearching(true);
     try {
       const res = await fetch(`/api/musclewiki/exercises?q=${encodeURIComponent(query)}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.exercises && Array.isArray(data.exercises) && data.exercises.length > 0) {
-          // Merge unique results prioritizing local matches
-          const seen = new Set(localFiltered.map(e => e.id));
-          const combined = [...localFiltered];
-          for (const item of data.exercises) {
-            if (!seen.has(item.id)) {
-              seen.add(item.id);
-              combined.push(item);
-            }
-          }
-          setSearchResults(combined);
-        }
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && Array.isArray(data.exercises)) {
+        setSearchResults(data.exercises);
+      } else {
+        setSearchResults([]);
       }
     } catch (err) {
-      console.warn('Network search warning (using local results):', err);
+      console.warn('Network search failed:', err);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
     }
   };
 
   if (!exercise) return null;
 
-  const currentMw = matchedMwExercise || initialMatch || MUSCLEWIKI_EXERCISES_DATABASE[0];
+  const currentMw = matchedMwExercise;
 
-  const activeGifUrl =
-    activeGender === 'female' && currentMw.femaleGifUrl
+  const activeGifUrl = currentMw
+    ? activeGender === 'female' && currentMw.femaleGifUrl
       ? currentMw.femaleGifUrl
       : activeAngle === 'side' && currentMw.sideGifUrl
       ? currentMw.sideGifUrl
-      : currentMw.gifUrl;
+      : currentMw.gifUrl
+    : ('gifUrl' in exercise ? exercise.gifUrl : undefined);
 
   const handleApply = () => {
     if (onApplyToExercise && currentMw) {
       onApplyToExercise({
         gifUrl: currentMw.gifUrl,
-        instructionsFa: currentMw.instructionsFa,
-        tipsFa: currentMw.tipsFa,
+        instructionsFa: currentMw.instructionsFa || [],
+        tipsFa: currentMw.tipsFa || [],
         nameEn: currentMw.nameEn
       });
       setApplySuccessMsg('اطلاعات و انیمیشن MuscleWiki با موفقیت روی حرکت شما ثبت شد!');
@@ -132,6 +147,10 @@ export const MuscleWikiDetailModal: React.FC<MuscleWikiDetailModalProps> = ({
       }, 1500);
     }
   };
+
+  const displayNameFa = currentMw?.nameFa || ('nameFa' in exercise ? exercise.nameFa : 'حرکت');
+  const displayNameEn = currentMw?.nameEn || ('nameEn' in exercise ? exercise.nameEn : '');
+  const displayCategory = (currentMw?.category || ('category' in exercise ? exercise.category : 'chest')) as any;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fadeIn">
@@ -151,7 +170,7 @@ export const MuscleWikiDetailModal: React.FC<MuscleWikiDetailModalProps> = ({
                 <span className="text-xs text-neutral-400 font-medium">پایگاه داده بین‌المللی تمرینات</span>
               </div>
               <h2 className="text-base font-extrabold text-white truncate mt-0.5">
-                {currentMw.nameFa}
+                {displayNameFa}
               </h2>
             </div>
           </div>
@@ -195,7 +214,7 @@ export const MuscleWikiDetailModal: React.FC<MuscleWikiDetailModalProps> = ({
                     setSearchQuery('');
                   }}
                   className={`w-full text-right p-2 rounded-xl text-xs flex items-center justify-between hover:bg-neutral-800 transition ${
-                    currentMw.id === item.id ? 'bg-[#D1FF00]/10 border border-[#D1FF00]/30 text-[#D1FF00] font-bold' : 'text-neutral-300'
+                    currentMw?.id === item.id ? 'bg-[#D1FF00]/10 border border-[#D1FF00]/30 text-[#D1FF00] font-bold' : 'text-neutral-300'
                   }`}
                 >
                   <div className="flex items-center gap-2">
@@ -212,6 +231,14 @@ export const MuscleWikiDetailModal: React.FC<MuscleWikiDetailModalProps> = ({
 
         {/* Main Body Content */}
         <div className="p-4 space-y-5 overflow-y-auto custom-scrollbar flex-1">
+          {isResolving && (
+            <div className="py-8 text-center text-xs text-neutral-400">در حال دریافت حرکت از MuscleWiki API...</div>
+          )}
+          {!isResolving && !currentMw && (
+            <div className="p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 text-rose-300 text-sm">
+              حرکتی از MuscleWiki پیدا نشد. جستجو کنید یا API key را بررسی کنید.
+            </div>
+          )}
 
           {/* GIF & Angles Display Section */}
           <div className="relative rounded-2xl bg-neutral-950 border border-neutral-800 overflow-hidden shadow-inner group">
@@ -241,7 +268,7 @@ export const MuscleWikiDetailModal: React.FC<MuscleWikiDetailModalProps> = ({
                 <span>بانوان</span>
               </button>
 
-              {currentMw.sideGifUrl && (
+              {currentMw?.sideGifUrl && (
                 <div className="flex items-center gap-1 pr-1 border-r border-neutral-700">
                   <button
                     onClick={() => setActiveAngle('front')}
@@ -280,9 +307,9 @@ export const MuscleWikiDetailModal: React.FC<MuscleWikiDetailModalProps> = ({
             <div className="w-full h-64 sm:h-72 flex items-center justify-center p-2 bg-neutral-950 overflow-hidden rounded-xl">
               <ExerciseAnimation
                 type="generic"
-                category={currentMw.category}
+                category={displayCategory}
                 gifUrl={activeGifUrl}
-                exerciseNameEn={currentMw.nameEn}
+                exerciseNameEn={displayNameEn}
                 className="w-full h-full"
               />
             </div>
@@ -290,7 +317,7 @@ export const MuscleWikiDetailModal: React.FC<MuscleWikiDetailModalProps> = ({
             <div className="px-3 py-2 bg-neutral-900/80 border-t border-neutral-800 flex flex-wrap items-center justify-between gap-2 text-[11px] text-neutral-400">
               <span className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                نام بین‌المللی: <strong className="text-white font-mono dir-ltr">{currentMw.nameEn}</strong>
+                نام بین‌المللی: <strong className="text-white font-mono dir-ltr">{displayNameEn}</strong>
               </span>
 
               <button
@@ -315,8 +342,8 @@ export const MuscleWikiDetailModal: React.FC<MuscleWikiDetailModalProps> = ({
                 <Target className="w-3.5 h-3.5 text-emerald-400" />
                 عضله اصلی هدف
               </p>
-              <p className="font-extrabold text-emerald-300 text-xs">{currentMw.targetMuscleFa}</p>
-              <p className="text-[10px] text-neutral-500 font-mono dir-ltr text-right">{currentMw.targetMuscleEn}</p>
+              <p className="font-extrabold text-emerald-300 text-xs">{currentMw?.targetMuscleFa || currentMw?.targetMuscleEn || "—"}</p>
+              <p className="text-[10px] text-neutral-500 font-mono dir-ltr text-right">{currentMw?.targetMuscleEn || ""}</p>
             </div>
 
             <div className="p-3 bg-neutral-900/80 border border-neutral-800 rounded-2xl">
@@ -324,8 +351,8 @@ export const MuscleWikiDetailModal: React.FC<MuscleWikiDetailModalProps> = ({
                 <Dumbbell className="w-3.5 h-3.5 text-sky-400" />
                 تجهیزات مورد نیاز
               </p>
-              <p className="font-bold text-sky-300 text-xs">{currentMw.equipmentFa}</p>
-              <p className="text-[10px] text-neutral-500 font-mono dir-ltr text-right">{currentMw.equipmentEn}</p>
+              <p className="font-bold text-sky-300 text-xs">{currentMw?.equipmentFa || currentMw?.equipmentEn || "—"}</p>
+              <p className="text-[10px] text-neutral-500 font-mono dir-ltr text-right">{currentMw?.equipmentEn || ""}</p>
             </div>
 
             <div className="p-3 bg-neutral-900/80 border border-neutral-800 rounded-2xl">
@@ -333,8 +360,8 @@ export const MuscleWikiDetailModal: React.FC<MuscleWikiDetailModalProps> = ({
                 <Layers className="w-3.5 h-3.5 text-purple-400" />
                 برنامه پیشنهادی
               </p>
-              <p className="font-bold text-purple-300 text-xs">{currentMw.defaultSets} ست × {currentMw.defaultReps}</p>
-              <p className="text-[10px] text-neutral-400">استراحت: {currentMw.defaultRestSeconds} ثانیه</p>
+              <p className="font-bold text-purple-300 text-xs">{currentMw?.defaultSets || "—"} ست × {currentMw?.defaultReps || "—"}</p>
+              <p className="text-[10px] text-neutral-400">استراحت: {currentMw?.defaultRestSeconds || "—"} ثانیه</p>
             </div>
 
             <div className="p-3 bg-neutral-900/80 border border-neutral-800 rounded-2xl">
@@ -343,7 +370,7 @@ export const MuscleWikiDetailModal: React.FC<MuscleWikiDetailModalProps> = ({
                 عضلات کمکی
               </p>
               <div className="flex flex-wrap gap-1 mt-1">
-                {currentMw.secondaryMusclesFa.map((sec, idx) => (
+                {(currentMw?.secondaryMusclesFa || []).map((sec, idx) => (
                   <span key={idx} className="bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] px-1.5 py-0.5 rounded-md">
                     {sec}
                   </span>
@@ -377,7 +404,7 @@ export const MuscleWikiDetailModal: React.FC<MuscleWikiDetailModalProps> = ({
             </div>
 
             <ol className="space-y-2.5 text-xs leading-relaxed">
-              {(showEnglishText ? currentMw.instructionsEn : currentMw.instructionsFa).map((step, idx) => (
+              {(showEnglishText ? (currentMw?.instructionsEn || []) : (currentMw?.instructionsFa || [])).map((step, idx) => (
                 <li key={idx} className="flex items-start gap-2.5 text-neutral-200">
                   <span className="w-5 h-5 rounded-full bg-[#D1FF00]/15 border border-[#D1FF00]/30 text-[#D1FF00] font-extrabold text-[10px] flex items-center justify-center shrink-0 mt-0.5">
                     {idx + 1}
@@ -389,14 +416,14 @@ export const MuscleWikiDetailModal: React.FC<MuscleWikiDetailModalProps> = ({
           </div>
 
           {/* Pro Tips / Technique Highlights */}
-          {currentMw.tipsFa && currentMw.tipsFa.length > 0 && (
+          {currentMw?.tipsFa && currentMw.tipsFa.length > 0 && (
             <div className="p-4 bg-amber-500/10 border border-amber-500/25 rounded-2xl space-y-2">
               <h4 className="text-xs font-extrabold text-amber-300 flex items-center gap-2">
                 <Lightbulb className="w-4 h-4 text-amber-400" />
                 نکات کلیدی هایپرتروفی و پیشگیری از آسیب (MuscleWiki Tips)
               </h4>
               <ul className="space-y-1.5 text-xs text-amber-200/90 leading-relaxed">
-                {currentMw.tipsFa.map((tip, idx) => (
+                {currentMw.tipsFa!.map((tip, idx) => (
                   <li key={idx} className="flex items-start gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 mt-1.5" />
                     <span>{tip}</span>
@@ -411,7 +438,8 @@ export const MuscleWikiDetailModal: React.FC<MuscleWikiDetailModalProps> = ({
             <div className="pt-2">
               <button
                 onClick={handleApply}
-                className="w-full py-3.5 px-4 bg-[#D1FF00] hover:bg-[#b8e600] text-black font-extrabold text-xs sm:text-sm rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-[#D1FF00]/10 transition active:scale-98"
+                disabled={!currentMw}
+                className="w-full py-3.5 px-4 bg-[#D1FF00] hover:bg-[#b8e600] text-black font-extrabold text-xs sm:text-sm rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-[#D1FF00]/10 transition active:scale-98 disabled:opacity-50 disabled:pointer-events-none"
               >
                 <Sparkles className="w-4 h-4 fill-black/20" />
                 <span>انتقال اطلاعات و انیمیشن این حرکت از MuscleWiki به تمرین شما</span>
@@ -438,13 +466,13 @@ export const MuscleWikiDetailModal: React.FC<MuscleWikiDetailModalProps> = ({
             <div className="w-full h-[70vh] flex items-center justify-center">
               <ExerciseAnimation
                 type="generic"
-                category={currentMw.category}
+                category={displayCategory}
                 gifUrl={activeGifUrl}
-                exerciseNameEn={currentMw.nameEn}
+                exerciseNameEn={displayNameEn}
                 className="w-full h-full rounded-3xl overflow-hidden border border-neutral-800 shadow-2xl"
               />
             </div>
-            <p className="text-sm font-bold text-white">{currentMw.nameFa} - {currentMw.nameEn}</p>
+            <p className="text-sm font-bold text-white">{displayNameFa} - {displayNameEn}</p>
           </div>
         </div>
       )}

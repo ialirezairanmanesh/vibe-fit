@@ -1,9 +1,8 @@
+import "dotenv/config";
 import express from "express";
 import path from "path";
 import fs from "fs";
 import { GoogleGenAI, Type } from "@google/genai";
-import { MUSCLEWIKI_EXERCISES_DATABASE, findBestMuscleWikiExercise } from "./src/data/musclewikiDataset.ts";
-
 const STORAGE_KEYS = new Set([
   "fa_workout_routines_v1",
   "fa_workout_sessions_v1",
@@ -237,81 +236,6 @@ async function startServer() {
       });
     }
   });
-  const AVAILABLE_GIF_FILENAMES = [
-    // MuscleWiki Repository Exercises
-    "Barbell_Bench_Press",
-    "Incline_Barbell_Bench_Press",
-    "Incline_Dumbbell_Press",
-    "Incline_Dumbbell_Chest_Fly",
-    "Push_Up",
-    "Incline_Push_Up",
-    "Diamond_Push_Up",
-    "Chest_Dips",
-    "Bent_Over_Barbell_Row",
-    "Conventional_Deadlift",
-    "Sumo_Deadlift",
-    "Unilateral_Dumbbell_Row",
-    "Wide_Grip_Pull_Up",
-    "Chin_Up",
-    "Overhead_Barbell_Press",
-    "Seated_Dumbbell_Overhead_Press",
-    "Dumbbell_Lateral_Raise",
-    "Barbell_Upright_Row",
-    "Dumbbell_Shrug",
-    "Seated_Dumbbell_Shrug",
-    "Barbell_Bicep_Curl",
-    "Dumbbell_Bicep_Curl",
-    "Dumbbell_Hammer_Curl",
-    "Barbell_Reverse_Curl",
-    "Dumbbell_Reverse_Curl",
-    "Barbell_Wrist_Curl",
-    "Dumbbell_Wrist_Curl",
-    "Dumbbell_Wrist_Extension",
-    "Barbell_Skullcrusher",
-    "Laying_Triceps_Extension",
-    "Dumbbell_Overhead_Tricep_Extension",
-    "Bench_Triceps_Dips",
-    "Barbell_Highbar_Squat",
-    "Dumbbell_Goblet_Squat",
-    "Bodyweight_Air_Squat",
-    "Bulgarian_Split_Squat",
-    "Bodyweight_Forward_Lunge",
-    "Glute_Bridge",
-    "Barbell_Calf_Raise",
-    "Dumbbell_Calf_Raise",
-    "Bodyweight_Calf_Raise",
-    "Bodyweight_Crunch",
-    "Lying_Leg_Raises",
-    "Forearm_Plank",
-    "Dumbbell_Russian_Twist",
-    "Elevated_Pike_Press",
-    "Elevated_Pike_Shoulder_Shrug",
-    // Compatibility fallbacks
-    "Dumbbell_Bench_Press",
-    "Incline_Chest_Press",
-    "Incline_Dumbbell_Fly",
-    "Chest_Fly",
-    "Dumbbell_Pullover",
-    "Cable_Bicep_Curl",
-    "EZ_Bar_Preacher_Curl",
-    "Crunch",
-    "Leg_Extension",
-    "Barbell_Squat",
-    "Lying_Leg_Curl",
-    "Seated_Calf_Raise",
-    "Triceps_Pushdown",
-    "Lying_Triceps_Extension",
-    "V_Bar_Triceps_Pushdown",
-    "Cable_Front_Raise",
-    "Machine_Shoulder_Press",
-    "Dumbbell_Shoulder_Press",
-    "Bent_Over_Rear_Delt_Fly",
-    "Lat_Pulldown",
-    "Bent_Over_Dumbbell_Row",
-    "Reverse_Grip_Lat_Pulldown",
-    "Back_Extension"
-  ];
-
   // API Endpoint: Persistent user data storage (survives container restarts via DATA_DIR volume)
   app.get("/api/storage/:key", (req, res) => {
     const key = String(req.params.key || "");
@@ -359,8 +283,7 @@ You are an expert fitness coach and exercise scientist specializing in bodybuild
 Your job is to parse raw workout program text in Persian or English, identify all training days, and break down every exercise accurately.
 
 CRITICAL INSTRUCTION FOR EXERCISE ANIMATION MATCHING:
-For every exercise identified, you MUST accurately classify it and select the closest matching English standard filename from this exact list:
-${AVAILABLE_GIF_FILENAMES.join(", ")}
+For every exercise identified, set nameEn to the closest standard English MuscleWiki exercise name (e.g. "Barbell Bench Press"). Media is resolved later via the MuscleWiki API — do not invent local GIF filenames.
 
 Categories must be one of: "chest", "back", "shoulders", "biceps", "triceps", "legs", "abs".
 Animation Types must be one of: "dumbbell_press", "incline_press", "fly", "pullover", "bicep_curl", "hammer_curl", "preacher_curl", "crunch", "leg_extension", "squat", "leg_curl", "calf_raise", "triceps_pushdown", "skullcrusher", "triceps_vbar", "front_raise", "shoulder_press", "rear_fly", "lat_pulldown", "dumbbell_row", "reverse_pulldown", "hyperextension".
@@ -471,7 +394,7 @@ Examine each exercise in the provided routines array.
 For every exercise:
 1. Identify the true exercise being described by nameFa and instructionsFa.
 2. Correct its nameEn to match one of these EXACT dataset GIF filenames:
-${AVAILABLE_GIF_FILENAMES.join(", ")}
+"[use standard English MuscleWiki exercise names; media comes from MuscleWiki API]"
 3. Correct category to one of: "chest", "back", "shoulders", "biceps", "triceps", "legs", "abs".
 4. Correct animationType to match the movement (e.g. "incline_press", "rear_fly", "triceps_vbar", "skullcrusher", "lat_pulldown", "bicep_curl", "hammer_curl", "squat", "leg_extension", etc.).
 5. Ensure Persian target muscle (targetMuscleFa), equipment (equipmentFa), instructions (instructionsFa), and tips (tipsFa) are accurate and professional.
@@ -631,7 +554,7 @@ Analyze:
 5. Provide a numerical score from 0 to 100 representing scientific effectiveness and balance.
 6. Provide clear Persian recommendations, strengths, warnings, and muscle breakdown.
 7. Provide an OPTIMIZED version of the program (suggestedOptimizedRoutines) if fixes are needed, mapping nameEn accurately to:
-${AVAILABLE_GIF_FILENAMES.join(", ")}
+"[use standard English MuscleWiki exercise names; media comes from MuscleWiki API]"
 `;
 
         const promptText = `
@@ -745,182 +668,17 @@ ${currentRoutines ? JSON.stringify(currentRoutines, null, 2) : "هنوز برن�
     }
   });
 
-  // Helper function to pick best local exercise GIF fallback file
-  const getLocalExerciseFallback = (urlStr: string, nameStr?: string, catStr?: string): string => {
-    const text = `${urlStr || ""} ${nameStr || ""} ${catStr || ""}`.toLowerCase();
-
-    // Priority matching for specific routine exercises
-    if (text.includes("preacher") || text.includes("scott") || text.includes("lary") || text.includes("لاری")) {
-      return "/exercises/EZ_Bar_Preacher_Curl.gif";
-    }
-    if (text.includes("pullover") || text.includes("پلاور")) {
-      return "/exercises/Dumbbell_Pullover.gif";
-    }
-    if ((text.includes("cable") || text.includes("سیم")) && (text.includes("bicep") || text.includes("curl") || text.includes("بازو"))) {
-      return "/exercises/Cable_Bicep_Curl.gif";
-    }
-    if (text.includes("leg extension") || text.includes("جلو پا") || (text.includes("extension") && text.includes("leg"))) {
-      return "/exercises/Leg_Extension.gif";
-    }
-    if (text.includes("leg curl") || text.includes("lying leg") || text.includes("پشت پا")) {
-      return "/exercises/Lying_Leg_Curl.gif";
-    }
-    if (text.includes("seated calf") || text.includes("ساق پا نشسته")) {
-      return "/exercises/Seated_Calf_Raise.gif";
-    }
-    if ((text.includes("reverse") || text.includes("برعکس")) && (text.includes("lat") || text.includes("pulldown") || text.includes("لت"))) {
-      return "/exercises/Reverse_Grip_Lat_Pulldown.gif";
-    }
-    if (text.includes("lat pulldown") || text.includes("لت") || (text.includes("pulldown") && text.includes("back"))) {
-      return "/exercises/Lat_Pulldown.gif";
-    }
-    if (text.includes("back extension") || text.includes("hyperextension") || text.includes("فیله")) {
-      return "/exercises/Back_Extension.gif";
-    }
-    if (text.includes("v-bar") || text.includes("v bar") || (text.includes("tricep") && (text.includes("rope") || text.includes("v")))) {
-      return "/exercises/V_Bar_Triceps_Pushdown.gif";
-    }
-    if (text.includes("tricep pushdown") || text.includes("triceps pushdown") || ((text.includes("tricep") || text.includes("پشت بازو")) && (text.includes("cable") || text.includes("سیم") || text.includes("pushdown")))) {
-      return "/exercises/Triceps_Pushdown.gif";
-    }
-    if (text.includes("front raise") || (text.includes("cable") && text.includes("front")) || text.includes("نشر جلو")) {
-      return "/exercises/Cable_Front_Raise.gif";
-    }
-    if (text.includes("rear delt") || (text.includes("bent over") && text.includes("delt")) || text.includes("نشر خم")) {
-      return "/exercises/Bent_Over_Rear_Delt_Fly.gif";
-    }
-    if (text.includes("machine shoulder") || (text.includes("shoulder") && text.includes("machine")) || text.includes("سرشانه دستگاه")) {
-      return "/exercises/Machine_Shoulder_Press.gif";
-    }
-    if (text.includes("pec deck") || text.includes("chest fly") || text.includes("پروانه") || (text.includes("machine") && text.includes("fly"))) {
-      return "/exercises/Chest_Fly.gif";
-    }
-    if (text.includes("incline") && text.includes("fly")) {
-      return "/exercises/Incline_Dumbbell_Fly.gif";
-    }
-    if (text.includes("incline") && (text.includes("press") || text.includes("bench"))) {
-      return "/exercises/Incline_Chest_Press.gif";
-    }
-    if (text.includes("dumbbell bench") || (text.includes("dumbbell") && text.includes("bench"))) {
-      return "/exercises/Dumbbell_Bench_Press.gif";
-    }
-    if (text.includes("bent over") && text.includes("row")) {
-      return "/exercises/Bent_Over_Dumbbell_Row.gif";
-    }
-
-    // MuscleWiki GIFs
-    if (text.includes("bench") || text.includes("chest") || text.includes("پرس سینه")) {
-      if (text.includes("incline") || text.includes("بالاسینه") || text.includes("بالا سینه")) {
-        return "/musclewiki-gifs/male-barbell-incline-bench-press-front.gif";
-      }
-      return "/musclewiki-gifs/male-barbell-bench-press-front_C2G7O8r.gif";
-    }
-    if (text.includes("incline") && (text.includes("fly") || text.includes("قفسه"))) {
-      return "/musclewiki-gifs/male-dumbbell-incline-chest-flys-front.gif";
-    }
-    if (text.includes("pushup") || text.includes("push-up") || text.includes("شنا")) {
-      if (text.includes("diamond") || text.includes("الماسی")) return "/musclewiki-gifs/male-bodyweight-diamond-pushup-front.gif";
-      if (text.includes("incline") || text.includes("شیب")) return "/musclewiki-gifs/male-bodyweight-incline-pushup-front.gif";
-      return "/musclewiki-gifs/male-bodyweight-pushup-front.gif";
-    }
-    if (text.includes("dip") || text.includes("پارالل") || text.includes("دیپ")) {
-      return "/musclewiki-gifs/male-bodyweight-dips-front.gif";
-    }
-
-    if (text.includes("deadlift") || text.includes("ددلیفت")) {
-      if (text.includes("sumo") || text.includes("سومو")) return "/musclewiki-gifs/male-barbell-sumo-deadlift-front_aeM2BqT.gif";
-      return "/musclewiki-gifs/male-barbell-deadlift-front.gif";
-    }
-    if (text.includes("pullup") || text.includes("pull-up") || text.includes("بارفیکس")) {
-      if (text.includes("chin") || text.includes("مچ برعکس")) return "/musclewiki-gifs/male-bodyweight-chinup-front.gif";
-      return "/musclewiki-gifs/male-bodyweight-pullup-front.gif";
-    }
-    if (text.includes("row") || text.includes("زیربغل") || text.includes("قایقی") || text.includes("خم")) {
-      if (text.includes("dumbbell") || text.includes("دمبل")) return "/musclewiki-gifs/male-dumbbell-row-unilateral-front.gif";
-      return "/musclewiki-gifs/male-barbell-bent-over-row-front.gif";
-    }
-
-    if (text.includes("military") || text.includes("overhead") || text.includes("سرشانه") || text.includes("میلیتاری")) {
-      if (text.includes("dumbbell") || text.includes("دمبل")) return "/musclewiki-gifs/male-dumbbell-seated-overhead-press-front.gif";
-      return "/musclewiki-gifs/male-barbell-overhead-press-front_OJMNLxU.gif";
-    }
-    if (text.includes("lateral") || text.includes("نشر")) {
-      return "/musclewiki-gifs/male-dumbbell-lateral-raise-front.gif";
-    }
-    if (text.includes("shrug") || text.includes("شراگ") || text.includes("کول")) {
-      if (text.includes("barbell") || text.includes("هالتر")) return "/musclewiki-gifs/male-barbell-upright-row-front_3ROsKgm.gif";
-      return "/musclewiki-gifs/male-dumbbell-shrug-front.gif";
-    }
-
-    if (text.includes("hammer") || text.includes("چکشی")) return "/musclewiki-gifs/male-dumbbell-hammer-curl-front_JbvhNLU.gif";
-    if (text.includes("bicep") || text.includes("curl") || text.includes("بازو") || text.includes("جلو بازو")) {
-      if (text.includes("reverse") || text.includes("برعکس")) return "/musclewiki-gifs/male-barbell-reverse-curl-front_ysdi82M.gif";
-      if (text.includes("dumbbell") || text.includes("دمبل")) return "/musclewiki-gifs/male-dumbbell-curl-front.gif";
-      return "/musclewiki-gifs/male-barbell-curl-front_uKPCb8P.gif";
-    }
-    if (text.includes("wrist") || text.includes("ساعد") || text.includes("مچ")) {
-      if (text.includes("barbell") || text.includes("هالتر")) return "/musclewiki-gifs/barbell-wristcurl-male-front.gif";
-      return "/musclewiki-gifs/male-dumbbell-wrist-curl-front.gif";
-    }
-
-    if (text.includes("skullcrusher") || text.includes("اسکال") || text.includes("فرانسوی")) return "/musclewiki-gifs/male-barbell-skullcrusher-front_qpHWUa8.gif";
-    if (text.includes("tricep") || text.includes("پشت بازو")) {
-      if (text.includes("overhead") || text.includes("پشت گردن")) return "/musclewiki-gifs/male-dumbbell-overhead-tricep-extension-front.gif";
-      if (text.includes("dip") || text.includes("نیمکت")) return "/musclewiki-gifs/male-bodyweight-tricep-dips-front.gif";
-      return "/musclewiki-gifs/male-barbell-laying-tricep-extensions-front.gif";
-    }
-
-    if (text.includes("squat") || text.includes("اسکوات") || text.includes("اسکات")) {
-      if (text.includes("goblet") || text.includes("گابلت")) return "/musclewiki-gifs/male-dumbbell-goblet-squat-front.gif";
-      if (text.includes("bulgarian") || text.includes("بلغاری")) return "/musclewiki-gifs/male-bodyweight-bulgarian-split-squat-front.gif";
-      if (text.includes("bodyweight") || text.includes("وزن بدن")) return "/musclewiki-gifs/male-bodyweight-squat-front.gif";
-      return "/musclewiki-gifs/male-barbell-highbar-squat-front.gif";
-    }
-    if (text.includes("lunge") || text.includes("لانج") || text.includes("قیچی")) return "/musclewiki-gifs/male-bodyweight-forward-lunge-front.gif";
-    if (text.includes("glute") || text.includes("bridge") || text.includes("پل باسن")) return "/musclewiki-gifs/male-bodyweight-glute-bridge-front.gif";
-    if (text.includes("calf") || text.includes("ساق")) {
-      if (text.includes("dumbbell") || text.includes("دمبل")) return "/musclewiki-gifs/male-dumbbell-calf-raise-front.gif";
-      if (text.includes("barbell") || text.includes("هالتر")) return "/musclewiki-gifs/male-barbell-calve-raise-front.gif";
-      return "/musclewiki-gifs/male-bodyweight-calve-raise-front.gif";
-    }
-
-    if (text.includes("plank") || text.includes("پلانک")) return "/musclewiki-gifs/male-bodyweight-forearm-plank-front.gif";
-    if (text.includes("leg raise") || text.includes("زیر شکم")) return "/musclewiki-gifs/male-bodyweight-leg-raises-front.gif";
-    if (text.includes("twist") || text.includes("چرخش روسی") || text.includes("روسی")) return "/musclewiki-gifs/male-dumbbell-russian-twist-front.gif";
-    if (text.includes("crunch") || text.includes("ab") || text.includes("شکم") || text.includes("کرانچ")) return "/musclewiki-gifs/male-bodyweight-crunch-front.gif";
-
-    // Category fallback
-    const cat = (catStr || "").toLowerCase();
-    if (cat === "chest") return "/musclewiki-gifs/male-barbell-bench-press-front_C2G7O8r.gif";
-    if (cat === "biceps") return "/musclewiki-gifs/male-barbell-curl-front_uKPCb8P.gif";
-    if (cat === "triceps") return "/musclewiki-gifs/male-barbell-skullcrusher-front_qpHWUa8.gif";
-    if (cat === "shoulders") return "/musclewiki-gifs/male-barbell-overhead-press-front_OJMNLxU.gif";
-    if (cat === "back") return "/musclewiki-gifs/male-barbell-bent-over-row-front.gif";
-    if (cat === "legs") return "/musclewiki-gifs/male-barbell-highbar-squat-front.gif";
-    if (cat === "abs") return "/musclewiki-gifs/male-bodyweight-crunch-front.gif";
-
-    return "/musclewiki-gifs/male-barbell-bench-press-front_C2G7O8r.gif";
-  };
-
-  // API Endpoint: Proxy external media (GIFs, MP4s, WebMs, images) with range support & smart local fallback
+  // API Endpoint: Proxy external media (GIFs, MP4s, WebMs, images) with range support
   app.get("/api/proxy-media", async (req, res) => {
     try {
       const targetUrl = (req.query.url as string) || (req.query.src as string) || "";
-      const exerciseName = (req.query.exerciseName as string) || (req.query.nameEn as string) || "";
-      const category = (req.query.category as string) || "";
 
       if (!targetUrl || typeof targetUrl !== "string") {
         return res.status(400).send("Missing target url parameter");
       }
 
-      // If it's already a relative local path, redirect to static asset
       if (targetUrl.startsWith("/")) {
-        const cleanPath = targetUrl.replace(/^\/public/, "");
-        const filePath = path.join(process.cwd(), "public", cleanPath);
-        if (fs.existsSync(filePath)) {
-          return res.sendFile(filePath);
-        }
-        return res.redirect(targetUrl);
+        return res.status(400).send("Local media paths are no longer served; use MuscleWiki API URLs");
       }
 
       console.log(`[Proxy Media] Requesting external media: ${targetUrl}`);
@@ -936,7 +694,7 @@ ${currentRoutines ? JSON.stringify(currentRoutines, null, 2) : "هنوز برن�
         headers["Range"] = String(req.headers.range);
       }
 
-      const apiKey = process.env.MUSCLEWIKI_API_KEY || (req.headers["x-api-key"] as string) || "mw_6ZDLaxXph7I9hyMH_wpehHIr55l68lT7Sb7OAGKJagQ";
+      const apiKey = process.env.MUSCLEWIKI_API_KEY || (req.headers["x-api-key"] as string) || "";
       if (apiKey) {
         headers["X-API-Key"] = String(apiKey);
         headers["Authorization"] = `Bearer ${apiKey}`;
@@ -947,52 +705,47 @@ ${currentRoutines ? JSON.stringify(currentRoutines, null, 2) : "هنوز برن�
         response = await fetch(targetUrl, { headers });
       } catch (fetchErr) {
         console.warn(`[Proxy Media] Network fetch error for ${targetUrl}:`, fetchErr);
+        return res.status(502).send("Failed to fetch upstream media");
       }
 
-      // If upstream succeeded (200 OK or 206 Partial Content)
-      if (response && (response.status === 200 || response.status === 206)) {
-        let contentType = response.headers.get("content-type") || "";
-        const cleanTarget = targetUrl.split("?")[0].toLowerCase();
-        const arrayBuffer = await response.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-
-        // Check if buffer is actually an HTML/Cloudflare error page
-        const headerSnippet = buffer.toString("utf8", 0, 100).toLowerCase();
-        const isHtmlPage = contentType.includes("html") || headerSnippet.includes("<!doctype") || headerSnippet.includes("<html") || headerSnippet.includes("<head");
-
-        if (isHtmlPage) {
-          console.warn(`[Proxy Media] Upstream for ${targetUrl} returned HTML error page instead of media binary. Falling back to local GIF.`);
-        } else {
-          if (!contentType || contentType.includes("text") || contentType.includes("json")) {
-            if (cleanTarget.endsWith(".mp4") || cleanTarget.includes("/videos/") || cleanTarget.includes("mp4")) contentType = "video/mp4";
-            else if (cleanTarget.endsWith(".webm")) contentType = "video/webm";
-            else if (cleanTarget.endsWith(".png")) contentType = "image/png";
-            else if (cleanTarget.endsWith(".jpg") || cleanTarget.endsWith(".jpeg")) contentType = "image/jpeg";
-            else contentType = "image/gif";
-          }
-
-          const contentLength = response.headers.get("content-length");
-          const contentRange = response.headers.get("content-range");
-
-          res.setHeader("Content-Type", contentType);
-          res.setHeader("Access-Control-Allow-Origin", "*");
-          res.setHeader("Cache-Control", "public, max-age=86400, s-maxage=86400");
-          res.setHeader("Accept-Ranges", "bytes");
-
-          if (contentLength) res.setHeader("Content-Length", contentLength);
-          if (contentRange) res.setHeader("Content-Range", contentRange);
-
-          return res.status(response.status).send(buffer);
-        }
+      if (!response || (response.status !== 200 && response.status !== 206)) {
+        console.warn(`[Proxy Media] Upstream failed (${response?.status || "No Response"}) for ${targetUrl}`);
+        return res.status(response?.status || 502).send("Upstream media unavailable");
       }
 
-      // Upstream failed (403 Cloudflare block, 404, etc.) -> Serve matching local exercise GIF!
-      console.warn(`[Proxy Media] Upstream failed (${response?.status || 'No Response'}). Redirecting to local exercise GIF fallback.`);
-      const fallbackFileName = getLocalExerciseFallback(targetUrl, exerciseName, category);
-      if (fallbackFileName.startsWith("/")) {
-        return res.redirect(302, fallbackFileName);
+      let contentType = response.headers.get("content-type") || "";
+      const cleanTarget = targetUrl.split("?")[0].toLowerCase();
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      const headerSnippet = buffer.toString("utf8", 0, 100).toLowerCase();
+      const isHtmlPage = contentType.includes("html") || headerSnippet.includes("<!doctype") || headerSnippet.includes("<html") || headerSnippet.includes("<head");
+      if (isHtmlPage) {
+        console.warn(`[Proxy Media] Upstream for ${targetUrl} returned HTML instead of media`);
+        return res.status(502).send("Upstream returned HTML instead of media");
       }
-      return res.redirect(302, `/exercises/${fallbackFileName}`);
+
+      if (!contentType || contentType.includes("text") || contentType.includes("json")) {
+        if (cleanTarget.endsWith(".mp4") || cleanTarget.includes("/videos/") || cleanTarget.includes("mp4")) contentType = "video/mp4";
+        else if (cleanTarget.endsWith(".webm")) contentType = "video/webm";
+        else if (cleanTarget.endsWith(".png")) contentType = "image/png";
+        else if (cleanTarget.endsWith(".jpg") || cleanTarget.endsWith(".jpeg")) contentType = "image/jpeg";
+        else if (cleanTarget.endsWith(".gif")) contentType = "image/gif";
+        else contentType = "application/octet-stream";
+      }
+
+      const contentLength = response.headers.get("content-length");
+      const contentRange = response.headers.get("content-range");
+
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Cache-Control", "public, max-age=86400, s-maxage=86400");
+      res.setHeader("Accept-Ranges", "bytes");
+
+      if (contentLength) res.setHeader("Content-Length", contentLength);
+      if (contentRange) res.setHeader("Content-Range", contentRange);
+
+      return res.status(response.status).send(buffer);
     } catch (err: any) {
       console.error("[Proxy Media] Unexpected error:", err);
       return res.status(500).send(`Failed to proxy media: ${err.message}`);
@@ -1002,18 +755,79 @@ ${currentRoutines ? JSON.stringify(currentRoutines, null, 2) : "هنوز برن�
   // In-memory cache for MuscleWiki API queries (24 hour TTL)
   const mwApiCache = new Map<string, { data: any; expiresAt: number }>();
 
-  // API Endpoint: MuscleWiki Exercises Search & Explorer Proxy
+  const pickMediaUrl = (ex: any): { primary: string; side: string; female: string } => {
+    const videos = Array.isArray(ex.videos) ? ex.videos : [];
+    const images = Array.isArray(ex.images) ? ex.images : [];
+    const videoUrl = (v: any) => (typeof v === "string" ? v : v?.url || v?.video || v?.src) || "";
+    const byAngle = (angle: string) =>
+      videos.find((v: any) => String(v?.angle || v?.view || v?.name || v?.url || "").toLowerCase().includes(angle));
+    const byGender = (gender: string) =>
+      videos.find((v: any) => String(v?.gender || v?.sex || "").toLowerCase().includes(gender));
+    const front = byAngle("front") || videos[0];
+    const side = byAngle("side") || videos[1];
+    const female = byGender("female");
+    const imageUrl = (img: any) => (typeof img === "string" ? img : img?.url) || "";
+    const primary = videoUrl(front) || ex.video_url || ex.videoUrl || ex.gif_url || ex.gifUrl || imageUrl(images[0]) || "";
+    const sideUrl = videoUrl(side) || ex.side_video_url || ex.sideGifUrl || imageUrl(images[1]) || "";
+    const femaleUrl = videoUrl(female) || ex.female_video_url || ex.femaleGifUrl || "";
+    return { primary: String(primary || ""), side: String(sideUrl || ""), female: String(femaleUrl || "") };
+  };
+
+  const mapBodyPartToMuscle = (cat: string): string => {
+    const c = String(cat || "").toLowerCase();
+    if (c === "chest") return "Chest";
+    if (c === "biceps") return "Biceps";
+    if (c === "triceps") return "Triceps";
+    if (c === "shoulders") return "Shoulders";
+    if (c === "back") return "Lats";
+    if (c === "legs") return "Quadriceps";
+    if (c === "abs") return "Abdominals";
+    return cat;
+  };
+
+  const mapMwCategoryFromMuscles = (ex: any): string => {
+    const muscles = [
+      ...(Array.isArray(ex.primary_muscles) ? ex.primary_muscles : []),
+      ...(Array.isArray(ex.muscles) ? ex.muscles : []),
+      ex.target_group,
+      ex.category
+    ]
+      .filter(Boolean)
+      .map((m) => String(m).toLowerCase());
+    if (muscles.some((m) => m.includes("chest") || m.includes("pectoral"))) return "chest";
+    if (muscles.some((m) => m.includes("bicep"))) return "biceps";
+    if (muscles.some((m) => m.includes("tricep"))) return "triceps";
+    if (muscles.some((m) => m.includes("shoulder") || m.includes("delt"))) return "shoulders";
+    if (muscles.some((m) => m.includes("lat") || m.includes("back") || m.includes("trap") || m.includes("rhomb"))) return "back";
+    if (muscles.some((m) => m.includes("quad") || m.includes("hamstring") || m.includes("glute") || m.includes("calf") || m.includes("leg"))) return "legs";
+    if (muscles.some((m) => m.includes("ab") || m.includes("core") || m.includes("oblique"))) return "abs";
+    return "chest";
+  };
+
+  // API Endpoint: MuscleWiki Exercises Search & Explorer Proxy (official API only)
   app.all("/api/musclewiki/exercises", async (req, res) => {
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Cache-Control", "public, max-age=86400, s-maxage=86400");
     try {
       const q = req.query.q || req.query.search || req.body?.search || "";
-      const category = req.query.category || req.body?.category || "all";
+      const category = req.query.category || req.body?.category || "all"; // app body-part filter
       const muscle = req.query.muscle || req.query.targetMuscle || req.body?.muscle || "all";
       const equipment = req.query.equipment || req.body?.equipment || "all";
-      const customApiKey = req.headers["x-musclewiki-key"] || req.headers["x-api-key"] || req.query.apiKey || process.env.MUSCLEWIKI_API_KEY || "mw_6ZDLaxXph7I9hyMH_wpehHIr55l68lT7Sb7OAGKJagQ";
+      const customApiKey =
+        req.headers["x-musclewiki-key"] ||
+        req.headers["x-api-key"] ||
+        req.query.apiKey ||
+        process.env.MUSCLEWIKI_API_KEY ||
+        "";
 
-      const cacheKey = `${q}:${category}:${muscle}:${equipment}:${customApiKey}`;
+      if (!customApiKey) {
+        return res.status(503).json({
+          success: false,
+          error: "MUSCLEWIKI_API_KEY is not configured"
+        });
+      }
+
+      const cacheKey = `${q}:${category}:${muscle}:${equipment}`;
       const now = Date.now();
       const cached = mwApiCache.get(cacheKey);
       if (cached && cached.expiresAt > now) {
@@ -1021,184 +835,122 @@ ${currentRoutines ? JSON.stringify(currentRoutines, null, 2) : "هنوز برن�
         return res.json(cached.data);
       }
 
-      console.log(`[MuscleWiki API Endpoint] Request received - q: "${q}", category: "${category}", muscle: "${muscle}", equipment: "${equipment}", apiKeyProvided: ${!!customApiKey}`);
+      console.log(`[MuscleWiki API Endpoint] Request received - q: "${q}", category: "${category}", muscle: "${muscle}", equipment: "${equipment}"`);
 
-      // Helper function for Persian & English string normalization
-      const normalizeText = (text: string): string => {
-        if (!text) return "";
-        return String(text)
-          .toLowerCase()
-          .replace(/[\u200c\u200b\u200d\u200e\u200f]/g, " ")
-          .replace(/ي/g, "ی")
-          .replace(/ك/g, "ک")
-          .replace(/[آأإ]/g, "ا")
-          .replace(/اسکات/g, "اسکوات")
-          .replace(/\s+/g, " ")
-          .trim();
-      };
-
-      // Helper to ensure media URL is proxied if external
-      const proxyIfNeeded = (rawUrl: string, nameEn?: string, category?: string): string => {
+      const proxyIfNeeded = (rawUrl: string, nameEn?: string, cat?: string): string => {
         if (!rawUrl || typeof rawUrl !== "string") return "";
         if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
-          return `/api/proxy-media?url=${encodeURIComponent(rawUrl)}&exerciseName=${encodeURIComponent(nameEn || '')}&category=${encodeURIComponent(category || '')}`;
+          return `/api/proxy-media?url=${encodeURIComponent(rawUrl)}&exerciseName=${encodeURIComponent(nameEn || "")}&category=${encodeURIComponent(cat || "")}`;
+        }
+        // Relative branded stream paths from MuscleWiki
+        if (rawUrl.includes("videos/") || rawUrl.endsWith(".mp4") || rawUrl.endsWith(".webm")) {
+          const absolute = rawUrl.startsWith("/")
+            ? `https://media.musclewiki.com${rawUrl}`
+            : `https://media.musclewiki.com/media/uploads/${rawUrl.replace(/^\/+/, "")}`;
+          return `/api/proxy-media?url=${encodeURIComponent(absolute)}&exerciseName=${encodeURIComponent(nameEn || "")}&category=${encodeURIComponent(cat || "")}`;
         }
         return rawUrl;
       };
 
-      // If custom API Key exists, attempt live fetch from official MuscleWiki API
-      if (customApiKey) {
-        try {
-          console.log(`[MuscleWiki API Endpoint] Attempting fetch to official MuscleWiki API...`);
-          const params = new URLSearchParams();
-          if (q) params.append("search", String(q));
-          if (category && category !== "all") params.append("category", String(category));
-          if (muscle && muscle !== "all") params.append("muscle", String(muscle));
+      const params = new URLSearchParams();
+      params.append("limit", "50");
+      // Official API: category = equipment; muscles = body part
+      if (equipment && equipment !== "all") params.append("category", String(equipment));
+      const muscleFilter =
+        muscle && muscle !== "all"
+          ? String(muscle)
+          : category && category !== "all"
+          ? mapBodyPartToMuscle(String(category))
+          : "";
+      if (muscleFilter) params.append("muscles", muscleFilter);
 
-          const mwRes = await fetch(`https://api.musclewiki.com/v1/exercises?${params.toString()}`, {
-            headers: {
-              "X-API-Key": String(customApiKey),
-              "X-RapidAPI-Key": String(customApiKey),
-              "Authorization": `Bearer ${customApiKey}`,
-              "Accept": "application/json"
-            }
-          });
+      const mwUrl =
+        q && String(q).trim().length >= 2
+          ? (() => {
+              const sp = new URLSearchParams();
+              sp.append("q", String(q).trim());
+              sp.append("limit", "50");
+              if (equipment && equipment !== "all") sp.append("category", String(equipment));
+              if (muscleFilter) sp.append("muscles", muscleFilter);
+              return `https://api.musclewiki.com/search?${sp.toString()}`;
+            })()
+          : `https://api.musclewiki.com/exercises?${params.toString()}`;
 
-          console.log(`[MuscleWiki API Endpoint] External API HTTP status: ${mwRes.status}`);
-
-          if (mwRes.ok) {
-            const mwData = await mwRes.json();
-            const list = Array.isArray(mwData) ? mwData : (mwData?.results || mwData?.exercises || mwData?.data || []);
-            if (list.length > 0) {
-              const mappedList = list.map((ex: any) => {
-                const videoUrl =
-                  ex.gifUrl ||
-                  ex.gif_url ||
-                  ex.video_url ||
-                  (Array.isArray(ex.videos) && (ex.videos[0]?.url || ex.videos[0])) ||
-                  (Array.isArray(ex.images) && ex.images[0]) ||
-                  "";
-                const nameEnVal = ex.nameEn || ex.name || "Exercise";
-                const catVal = String(ex.category || ex.target_group || "chest").toLowerCase();
-                return {
-                  ...ex,
-                  gifUrl: proxyIfNeeded(videoUrl, nameEnVal, catVal),
-                  nameEn: nameEnVal,
-                  nameFa: ex.nameFa || ex.name || "حرکت ورزشی",
-                  category: catVal
-                };
-              });
-              console.log(`[MuscleWiki API Endpoint] Official API returned ${mappedList.length} mapped exercises. First media URL: ${mappedList[0]?.gifUrl}`);
-              const resPayload = {
-                success: true,
-                source: "MuscleWiki Official API",
-                count: mappedList.length,
-                exercises: mappedList
-              };
-              mwApiCache.set(cacheKey, { data: resPayload, expiresAt: Date.now() + 86400000 }); // 24 hour TTL
-              return res.json(resPayload);
-            }
-          }
-        } catch (mwErr) {
-          console.warn("[MuscleWiki API Endpoint] Official API fetch failed, falling back to local dataset:", mwErr);
+      const mwRes = await fetch(mwUrl, {
+        headers: {
+          "X-API-Key": String(customApiKey),
+          "Accept": "application/json"
         }
-      }
-
-      // Local Dataset Search & Ranking Logic
-      const equipmentMatch = (exEqEn: string, exEqFa: string, reqEq: string): boolean => {
-        if (!reqEq || reqEq === "all") return true;
-        const reqNorm = normalizeText(reqEq);
-        const enNorm = normalizeText(exEqEn);
-        const faNorm = normalizeText(exEqFa);
-
-        if (enNorm.includes(reqNorm) || faNorm.includes(reqNorm) || reqNorm.includes(enNorm)) return true;
-        if ((reqNorm.includes("barbell") || reqNorm.includes("هالتر")) && (enNorm.includes("barbell") || faNorm.includes("هالتر"))) return true;
-        if ((reqNorm.includes("dumbbell") || reqNorm.includes("دمبل")) && (enNorm.includes("dumbbell") || faNorm.includes("دمبل"))) return true;
-        if ((reqNorm.includes("cable") || reqNorm.includes("سیم")) && (enNorm.includes("cable") || faNorm.includes("سیم"))) return true;
-        if ((reqNorm.includes("machine") || reqNorm.includes("دستگاه")) && (enNorm.includes("machine") || faNorm.includes("دستگاه"))) return true;
-        if ((reqNorm.includes("bodyweight") || reqNorm.includes("وزن بدن")) && (enNorm.includes("bodyweight") || faNorm.includes("وزن بدن"))) return true;
-        if ((reqNorm.includes("kettlebell") || reqNorm.includes("کتل")) && (enNorm.includes("kettlebell") || faNorm.includes("کتل"))) return true;
-        return false;
-      };
-
-      const categoryMatch = (exCat: string, reqCat: string): boolean => {
-        if (!reqCat || reqCat === "all") return true;
-        const c = normalizeText(reqCat);
-        const exC = normalizeText(exCat);
-        if (exC === c || exC.includes(c) || c.includes(exC)) return true;
-        if (c.includes("سینه") && exC === "chest") return true;
-        if (c.includes("بازو") && (exC === "biceps" || exC === "triceps")) return true;
-        if (c.includes("سرشانه") && exC === "shoulders") return true;
-        if (c.includes("پشت") && exC === "back") return true;
-        if (c.includes("پا") && exC === "legs") return true;
-        if (c.includes("شکم") && exC === "abs") return true;
-        return false;
-      };
-
-      let results: any[] = [];
-      if (q) {
-        const bestDirect = findBestMuscleWikiExercise(String(q), String(category || ""));
-        const matchedWithScores = MUSCLEWIKI_EXERCISES_DATABASE.map((ex) => {
-          let score = 0;
-
-          if (bestDirect && ex.id === bestDirect.id) score += 500;
-
-          const isCatMatch = categoryMatch(ex.category, String(category));
-          const isEqMatch = equipmentMatch(ex.equipmentEn, ex.equipmentFa, String(equipment));
-
-          if (isCatMatch) score += 20;
-          if (isEqMatch) score += 15;
-
-          const normQ = normalizeText(String(q));
-          const normEn = normalizeText(ex.nameEn);
-          const normFa = normalizeText(ex.nameFa);
-          const normMuscle = normalizeText(ex.targetMuscleFa);
-          const normEq = normalizeText(ex.equipmentFa);
-
-          if (normFa.includes(normQ) || normEn.includes(normQ)) score += 100;
-          if (normQ.includes(normFa) || normQ.includes(normEn)) score += 80;
-          if (normMuscle.includes(normQ)) score += 50;
-          if (normEq.includes(normQ)) score += 30;
-
-          const tokens = normQ.split(/\s+/).filter((t) => t.length > 1);
-          for (const token of tokens) {
-            if (normFa.includes(token)) score += 25;
-            if (normEn.includes(token)) score += 25;
-            if (normMuscle.includes(token)) score += 15;
-            if (normEq.includes(token)) score += 10;
-          }
-
-          return { ex, score };
-        });
-
-        results = matchedWithScores
-          .filter((item) => item.score > 0)
-          .sort((a, b) => b.score - a.score)
-          .map((item) => item.ex);
-      } else {
-        results = MUSCLEWIKI_EXERCISES_DATABASE.filter(ex => {
-          const isCatMatch = categoryMatch(ex.category, String(category));
-          const isEqMatch = equipmentMatch(ex.equipmentEn, ex.equipmentFa, String(equipment));
-          return isCatMatch && isEqMatch;
-        });
-      }
-
-      if (results.length === 0 && q) {
-        const fallback = findBestMuscleWikiExercise(String(q), String(category || ""));
-        results = fallback ? [fallback] : [...MUSCLEWIKI_EXERCISES_DATABASE];
-      }
-
-      console.log(`[MuscleWiki API Endpoint] Returning ${results.length} exercises from MuscleWiki Local Dataset.`);
-
-      return res.json({
-        success: true,
-        source: "MuscleWiki Local Dataset",
-        count: results.length,
-        exercises: results
       });
+
+      console.log(`[MuscleWiki API Endpoint] External API HTTP status: ${mwRes.status} url=${mwUrl}`);
+
+      if (!mwRes.ok) {
+        const errBody = await mwRes.text().catch(() => "");
+        return res.status(502).json({
+          success: false,
+          error: `MuscleWiki API returned HTTP ${mwRes.status}`,
+          details: errBody.slice(0, 300)
+        });
+      }
+
+      const mwData = await mwRes.json();
+      const list = Array.isArray(mwData) ? mwData : (mwData?.results || mwData?.exercises || mwData?.data || []);
+      if (!Array.isArray(list) || list.length === 0) {
+        const resPayload = {
+          success: true,
+          source: "MuscleWiki Official API",
+          count: 0,
+          exercises: []
+        };
+        mwApiCache.set(cacheKey, { data: resPayload, expiresAt: Date.now() + 86400000 });
+        return res.json(resPayload);
+      }
+
+      const mappedList = list.map((ex: any) => {
+        const nameEnVal = ex.nameEn || ex.name || "Exercise";
+        const catVal = mapMwCategoryFromMuscles(ex);
+        const media = pickMediaUrl(ex);
+        const primaryMuscles = Array.isArray(ex.primary_muscles) ? ex.primary_muscles : [];
+        const steps = Array.isArray(ex.steps)
+          ? ex.steps
+          : typeof ex.steps === "string"
+          ? ex.steps.split(/\n+/).map((s: string) => s.trim()).filter(Boolean)
+          : [];
+        return {
+          ...ex,
+          id: String(ex.id || ex.slug || `mw-${nameEnVal}`.toLowerCase().replace(/\s+/g, "-")),
+          nameEn: nameEnVal,
+          nameFa: ex.nameFa || ex.name || "حرکت ورزشی",
+          category: catVal,
+          targetMuscleEn: primaryMuscles[0] || ex.targetMuscleEn || "",
+          targetMuscleFa: primaryMuscles[0] || ex.targetMuscleFa || "",
+          secondaryMusclesFa: primaryMuscles.slice(1),
+          equipmentEn: ex.category || ex.equipmentEn || "",
+          equipmentFa: ex.category || ex.equipmentFa || "",
+          difficultyFa: ex.difficulty || ex.difficultyFa || "",
+          instructionsFa: Array.isArray(ex.instructionsFa) ? ex.instructionsFa : steps,
+          instructionsEn: Array.isArray(ex.instructionsEn) ? ex.instructionsEn : steps,
+          tipsFa: Array.isArray(ex.tipsFa) ? ex.tipsFa : [],
+          gifUrl: proxyIfNeeded(media.primary, nameEnVal, catVal),
+          sideGifUrl: media.side ? proxyIfNeeded(media.side, nameEnVal, catVal) : undefined,
+          femaleGifUrl: media.female ? proxyIfNeeded(media.female, nameEnVal, catVal) : undefined,
+          source: "MuscleWiki API"
+        };
+      });
+
+      console.log(`[MuscleWiki API Endpoint] Official API returned ${mappedList.length} mapped exercises. First media URL: ${mappedList[0]?.gifUrl}`);
+      const resPayload = {
+        success: true,
+        source: "MuscleWiki Official API",
+        count: mappedList.length,
+        exercises: mappedList
+      };
+      mwApiCache.set(cacheKey, { data: resPayload, expiresAt: Date.now() + 86400000 });
+      return res.json(resPayload);
     } catch (err: any) {
       console.error("Error in /api/musclewiki/exercises:", err);
-      return res.status(500).json({ error: err.message || "Failed to fetch MuscleWiki exercises." });
+      return res.status(502).json({ success: false, error: err.message || "Failed to fetch MuscleWiki exercises." });
     }
   });
 
