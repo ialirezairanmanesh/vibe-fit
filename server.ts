@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import { MUSCLEWIKI_EXERCISES_DATABASE, findBestMuscleWikiExercise } from "./src/data/musclewikiDataset.ts";
 
@@ -51,13 +50,16 @@ function writeStorageValue(key: string, data: unknown): void {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
 
   // Liveness / Health check endpoints for Cloud Run and container orchestrators
   app.get("/health", (req, res) => res.status(200).json({ status: "ok" }));
   app.get("/healthz", (req, res) => res.status(200).json({ status: "ok" }));
   app.get("/api/health", (req, res) => {
-    res.status(200).json({ status: "ok", geminiConfigured: !!process.env.GEMINI_API_KEY });
+    res.status(200).json({
+      status: "ok",
+      geminiConfigured: !!process.env.GEMINI_API_KEY,
+      dataDir: getDataDir()
+    });
   });
 
   app.use(express.json({ limit: "50mb" }));
@@ -309,15 +311,6 @@ async function startServer() {
     "Reverse_Grip_Lat_Pulldown",
     "Back_Extension"
   ];
-
-  // API Endpoint: Health check
-  app.get("/api/health", (req, res) => {
-    res.json({
-      status: "ok",
-      geminiConfigured: !!process.env.GEMINI_API_KEY,
-      dataDir: getDataDir()
-    });
-  });
 
   // API Endpoint: Persistent user data storage (survives container restarts via DATA_DIR volume)
   app.get("/api/storage/:key", (req, res) => {
@@ -1254,29 +1247,65 @@ ${currentRoutines ? JSON.stringify(currentRoutines, null, 2) : "هنوز برن�
     next(err);
   });
 
-  // Vite middleware in development
-  if (process.env.NODE_ENV !== "production") {
+  // Determine if running in production mode (compiled CJS in dist or explicit NODE_ENV=production)
+  const isCjsBundle = typeof __dirname !== "undefined";
+  const appDir = isCjsBundle ? __dirname : process.cwd();
+  const isProduction =
+    process.env.NODE_ENV === "production" ||
+    (isCjsBundle && fs.existsSync(path.join(appDir, "index.html")));
+
+  if (!isProduction) {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = fs.existsSync(path.join(process.cwd(), "dist", "index.html"))
+    const distPath = fs.existsSync(path.join(appDir, "index.html"))
+      ? appDir
+      : fs.existsSync(path.join(process.cwd(), "dist", "index.html"))
       ? path.join(process.cwd(), "dist")
-      : fs.existsSync(path.join(__dirname, "index.html"))
-      ? __dirname
       : path.join(process.cwd(), "dist");
 
+    console.log(`[Production Server] Serving static build from: ${distPath}`);
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
+  const PORT = 3000;
+
+  const server = app.listen(PORT, "0.0.0.0", () => {
+    console.log(`[Server] Running and listening on http://0.0.0.0:${PORT}`);
   });
+
+  server.on("error", (err: any) => {
+    console.error(`[Server] Port ${PORT} error:`, err.message);
+  });
+
+  const shutdown = () => {
+    console.log("Shutting down server gracefully...");
+    server.close(() => {
+      console.log("Server stopped.");
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(0), 4000);
+  };
+
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
 }
 
-startServer();
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Rejection at:", promise, "reason:", reason);
+});
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught Exception thrown:", error);
+});
+
+startServer().catch((err) => {
+  console.error("Failed to start server:", err);
+  process.exit(1);
+});
