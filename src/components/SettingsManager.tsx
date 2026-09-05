@@ -683,27 +683,27 @@ export const SettingsManager: React.FC<SettingsManagerProps> = ({
         </button>
       </div>
 
-      {/* Reset Plan Section */}
+      {/* Clear Routines Section */}
       <div className="p-5 bg-slate-900 border border-slate-800 rounded-3xl space-y-4 shadow-xl">
         <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-          <RotateCcw className="w-4 h-4 text-amber-400" />
-          بازنشانی به برنامه هفتگی اولیه
+          <RotateCcw className="w-4 h-4 text-rose-400" />
+          پاکسازی و شروع مجدد برنامه کاربر
         </h3>
 
         <p className="text-xs text-slate-400 leading-relaxed">
-          اگر تغییراتی در حرکات برنامه ایجاد کرده‌اید و می‌خواهید مجدداً برنامه اولیه ۳ روزه (سینه + جلو بازو، پا + پشت بازو، سرشانه + زیر بغل) بارگذاری شود، از این گزینه استفاده کنید.
+          اگر می‌خواهید کلیه روزها و حرکات ثبت‌شده برای این کاربر را پاک کرده و از نو با متن پیام مربی یا دستی روزهای جدید ایجاد کنید، از این دکمه استفاده نمایید.
         </p>
 
         <button
           onClick={() => {
-            if (confirm('آیا از بازنشانی برنامه به حالت اولیه اطمینان دارید؟ تغییرات حرکات سفارشی شما بازنشانی خواهد شد.')) {
+            if (confirm('آیا از پاکسازی کلیه روزها و حرکات برنامه این کاربر اطمینان دارید؟')) {
               onResetPlan();
             }
           }}
-          className="py-3 px-4 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-bold text-xs flex items-center justify-center gap-2 transition"
+          className="py-3 px-4 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 font-bold text-xs flex items-center justify-center gap-2 transition"
         >
-          <RotateCcw className="w-4 h-4 text-amber-400" />
-          بارگذاری مجدد برنامه هفتگی کاربر
+          <RotateCcw className="w-4 h-4 text-rose-400" />
+          پاکسازی برنامه و شروع مجدد
         </button>
       </div>
 
