@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Exercise } from '../types';
-import { MuscleWikiExercise, MUSCLEWIKI_EXERCISES_DATABASE } from '../data/musclewikiDataset';
+import { MuscleWikiExercise, MUSCLEWIKI_EXERCISES_DATABASE, findBestMuscleWikiExercise } from '../data/musclewikiDataset';
 import { ExerciseAnimation } from './ExerciseAnimation';
 import { MuscleWikiDiagnostic } from './MuscleWikiDiagnostic';
 import { 
@@ -33,11 +33,18 @@ export const MuscleWikiDetailModal: React.FC<MuscleWikiDetailModalProps> = ({
   onClose,
   onApplyToExercise
 }) => {
-  const [matchedMwExercise, setMatchedMwExercise] = useState<MuscleWikiExercise | null>(null);
+  // Synchronously compute initial best match so there is ZERO flash of wrong exercises
+  const initialMatch = useMemo(() => {
+    if (!exercise) return null;
+    return findBestMuscleWikiExercise(exercise);
+  }, [exercise]);
+
+  const [matchedMwExercise, setMatchedMwExercise] = useState<MuscleWikiExercise | null>(initialMatch);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [searchResults, setSearchResults] = useState<MuscleWikiExercise[]>([]);
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [activeGender, setActiveGender] = useState<'male' | 'female'>('male');
+  const [activeAngle, setActiveAngle] = useState<'front' | 'side'>('front');
   const [showEnglishText, setShowEnglishText] = useState<boolean>(false);
   const [isFullscreenGif, setIsFullscreenGif] = useState<boolean>(false);
   const [applySuccessMsg, setApplySuccessMsg] = useState<string>('');
@@ -46,110 +53,69 @@ export const MuscleWikiDetailModal: React.FC<MuscleWikiDetailModalProps> = ({
   useEffect(() => {
     if (!exercise) return;
 
-    // Check if exercise is already a MuscleWikiExercise
-    if ('source' in exercise && exercise.source === 'MuscleWiki API') {
-      setMatchedMwExercise(exercise as MuscleWikiExercise);
-      return;
-    }
+    // Reset angle when changing exercise
+    setActiveAngle('front');
 
-    const exNameEn = (exercise.nameEn || '').trim();
-    const exNameFa = (exercise.nameFa || '').trim();
-    const searchTerm = exNameFa || exNameEn;
-
-    console.log('[MuscleWikiDetailModal] Auto-fetching best match for exercise:', { nameFa: exNameFa, nameEn: exNameEn, category: exercise.category });
-
-    let isMounted = true;
-
-    if (searchTerm) {
-      const categoryParam = exercise.category ? `&category=${encodeURIComponent(exercise.category)}` : '';
-      fetch(`/api/musclewiki/exercises?q=${encodeURIComponent(searchTerm)}${categoryParam}`)
-        .then((res) => {
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          return res.json();
-        })
-        .then((data) => {
-          if (!isMounted) return;
-          console.log('[MuscleWikiDetailModal] API match result count:', data?.exercises?.length);
-          if (data && Array.isArray(data.exercises) && data.exercises.length > 0) {
-            setMatchedMwExercise(data.exercises[0]);
-            return;
-          }
-          performLocalMatch();
-        })
-        .catch((err) => {
-          console.warn('[MuscleWikiDetailModal] API fetch match error, using local dataset:', err);
-          if (isMounted) performLocalMatch();
-        });
-    } else {
-      performLocalMatch();
-    }
-
-    function performLocalMatch() {
-      const nameLowerEn = exNameEn.toLowerCase();
-      const nameLowerFa = exNameFa.toLowerCase();
-
-      let found = MUSCLEWIKI_EXERCISES_DATABASE.find((mwEx) => {
-        const mwEn = mwEx.nameEn.toLowerCase();
-        const mwFa = mwEx.nameFa.toLowerCase();
-        return (
-          (nameLowerEn && (mwEn.includes(nameLowerEn) || nameLowerEn.includes(mwEn))) ||
-          (nameLowerFa && (mwFa.includes(nameLowerFa) || nameLowerFa.includes(mwFa)))
-        );
-      });
-
-      if (found) {
-        setMatchedMwExercise(found);
-      } else {
-        const catMatch = MUSCLEWIKI_EXERCISES_DATABASE.find((mwEx) => mwEx.category === exercise.category);
-        setMatchedMwExercise(catMatch || MUSCLEWIKI_EXERCISES_DATABASE[0]);
-      }
-    }
-
-    return () => {
-      isMounted = false;
-    };
+    // Instantly set the precise synchronous match
+    const bestMatch = findBestMuscleWikiExercise(exercise);
+    setMatchedMwExercise(bestMatch);
+    setSearchQuery('');
+    setSearchResults([]);
   }, [exercise]);
 
   // Live search in MuscleWiki database
   const handleSearch = async (query: string) => {
     setSearchQuery(query);
-    if (!query.trim()) {
+    const qLower = query.toLowerCase().trim();
+    if (!qLower) {
       setSearchResults([]);
       return;
     }
 
-    setIsSearching(true);
-    console.log('[MuscleWikiDetailModal] Live searching MuscleWiki:', query);
+    // 1. Instant local search with smart ranking
+    const localFiltered = MUSCLEWIKI_EXERCISES_DATABASE.filter((ex) => {
+      const en = ex.nameEn.toLowerCase();
+      const fa = ex.nameFa.toLowerCase();
+      const target = ex.targetMuscleFa.toLowerCase();
+      const eq = ex.equipmentFa.toLowerCase();
+      return en.includes(qLower) || fa.includes(qLower) || target.includes(qLower) || eq.includes(qLower);
+    });
 
+    setSearchResults(localFiltered);
+
+    // 2. Optionally query server for any additional dynamic items
     try {
       const res = await fetch(`/api/musclewiki/exercises?q=${encodeURIComponent(query)}`);
       if (res.ok) {
         const data = await res.json();
-        console.log('[MuscleWikiDetailModal] Search results count:', data?.exercises?.length);
-        if (data.exercises && Array.isArray(data.exercises)) {
-          setSearchResults(data.exercises);
+        if (data.exercises && Array.isArray(data.exercises) && data.exercises.length > 0) {
+          // Merge unique results prioritizing local matches
+          const seen = new Set(localFiltered.map(e => e.id));
+          const combined = [...localFiltered];
+          for (const item of data.exercises) {
+            if (!seen.has(item.id)) {
+              seen.add(item.id);
+              combined.push(item);
+            }
+          }
+          setSearchResults(combined);
         }
       }
     } catch (err) {
-      console.warn('Failed to query /api/musclewiki/exercises:', err);
-      // Fallback search in local database
-      const qLower = query.toLowerCase().trim();
-      const filtered = MUSCLEWIKI_EXERCISES_DATABASE.filter(
-        (ex) =>
-          ex.nameFa.toLowerCase().includes(qLower) ||
-          ex.nameEn.toLowerCase().includes(qLower) ||
-          ex.targetMuscleFa.toLowerCase().includes(qLower)
-      );
-      setSearchResults(filtered);
-    } finally {
-      setIsSearching(false);
+      console.warn('Network search warning (using local results):', err);
     }
   };
 
   if (!exercise) return null;
 
-  const currentMw = matchedMwExercise || MUSCLEWIKI_EXERCISES_DATABASE[0];
-  const activeGifUrl = activeGender === 'female' && currentMw.femaleGifUrl ? currentMw.femaleGifUrl : currentMw.gifUrl;
+  const currentMw = matchedMwExercise || initialMatch || MUSCLEWIKI_EXERCISES_DATABASE[0];
+
+  const activeGifUrl =
+    activeGender === 'female' && currentMw.femaleGifUrl
+      ? currentMw.femaleGifUrl
+      : activeAngle === 'side' && currentMw.sideGifUrl
+      ? currentMw.sideGifUrl
+      : currentMw.gifUrl;
 
   const handleApply = () => {
     if (onApplyToExercise && currentMw) {
@@ -260,7 +226,7 @@ export const MuscleWikiDetailModal: React.FC<MuscleWikiDetailModalProps> = ({
                 }`}
               >
                 <User className="w-3.5 h-3.5" />
-                <span>مدل آقایان</span>
+                <span>آقایان</span>
               </button>
               
               <button
@@ -272,8 +238,33 @@ export const MuscleWikiDetailModal: React.FC<MuscleWikiDetailModalProps> = ({
                 }`}
               >
                 <User className="w-3.5 h-3.5" />
-                <span>مدل بانوان</span>
+                <span>بانوان</span>
               </button>
+
+              {currentMw.sideGifUrl && (
+                <div className="flex items-center gap-1 pr-1 border-r border-neutral-700">
+                  <button
+                    onClick={() => setActiveAngle('front')}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${
+                      activeAngle === 'front'
+                        ? 'bg-neutral-200 text-black shadow'
+                        : 'text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    روبه‌رو
+                  </button>
+                  <button
+                    onClick={() => setActiveAngle('side')}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${
+                      activeAngle === 'side'
+                        ? 'bg-neutral-200 text-black shadow'
+                        : 'text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    نیم‌رخ
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Fullscreen Expand Button */}

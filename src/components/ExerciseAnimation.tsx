@@ -81,52 +81,141 @@ function detectMedia(url?: string): { type: MediaType; embedUrl?: string } {
   return { type: 'image' };
 }
 
-// Map animation type or exercise name to best matching local file in public/exercises/ dataset
+// Map animation type or exercise name to best matching local file in public/musclewiki-gifs/ or public/exercises/
 function getBestLocalExerciseGif(nameEn?: string, category?: string): string {
   const text = `${nameEn || ''} ${category || ''}`.toLowerCase();
 
-  if (text.includes('incline') && text.includes('press')) return '/exercises/Incline_Dumbbell_Press.gif';
-  if (text.includes('incline') && (text.includes('fly') || text.includes('flye'))) return '/exercises/Incline_Dumbbell_Fly.gif';
-  if (text.includes('fly') || text.includes('crossover') || text.includes('pec')) return '/exercises/Chest_Fly.gif';
-  if (text.includes('pullover')) return '/exercises/Dumbbell_Pullover.gif';
-  if (text.includes('bench') || text.includes('chest') || text.includes('pushup') || text.includes('press')) return '/exercises/Dumbbell_Bench_Press.gif';
+  // Specific Routine Exercises First
+  if (text.includes('preacher') || text.includes('scott') || text.includes('lary') || text.includes('لاری')) {
+    return '/exercises/EZ_Bar_Preacher_Curl.gif';
+  }
+  if (text.includes('pullover') || text.includes('پلاور')) {
+    return '/exercises/Dumbbell_Pullover.gif';
+  }
+  if ((text.includes('cable') || text.includes('سیم')) && (text.includes('bicep') || text.includes('curl') || text.includes('بازو'))) {
+    return '/exercises/Cable_Bicep_Curl.gif';
+  }
+  if (text.includes('leg extension') || text.includes('جلو پا') || (text.includes('extension') && text.includes('leg'))) {
+    return '/exercises/Leg_Extension.gif';
+  }
+  if (text.includes('leg curl') || text.includes('lying leg') || text.includes('پشت پا')) {
+    return '/exercises/Lying_Leg_Curl.gif';
+  }
+  if (text.includes('seated calf') || (text.includes('calf') && text.includes('seated')) || text.includes('ساق پا نشسته')) {
+    return '/exercises/Seated_Calf_Raise.gif';
+  }
+  if ((text.includes('reverse') || text.includes('برعکس')) && (text.includes('lat') || text.includes('pulldown') || text.includes('لت'))) {
+    return '/exercises/Reverse_Grip_Lat_Pulldown.gif';
+  }
+  if (text.includes('lat pulldown') || text.includes('لت') || (text.includes('pulldown') && text.includes('back'))) {
+    return '/exercises/Lat_Pulldown.gif';
+  }
+  if (text.includes('back extension') || text.includes('hyperextension') || text.includes('فیله')) {
+    return '/exercises/Back_Extension.gif';
+  }
+  if (text.includes('v-bar') || text.includes('v bar') || (text.includes('tricep') && (text.includes('rope') || text.includes('v')))) {
+    return '/exercises/V_Bar_Triceps_Pushdown.gif';
+  }
+  if (text.includes('tricep pushdown') || text.includes('triceps pushdown') || ((text.includes('tricep') || text.includes('پشت بازو')) && (text.includes('cable') || text.includes('سیم') || text.includes('pushdown')))) {
+    return '/exercises/Triceps_Pushdown.gif';
+  }
+  if (text.includes('front raise') || (text.includes('cable') && text.includes('front')) || text.includes('نشر جلو')) {
+    return '/exercises/Cable_Front_Raise.gif';
+  }
+  if (text.includes('rear delt') || (text.includes('bent over') && text.includes('delt')) || text.includes('نشر خم')) {
+    return '/exercises/Bent_Over_Rear_Delt_Fly.gif';
+  }
+  if (text.includes('machine shoulder') || (text.includes('shoulder') && text.includes('machine')) || text.includes('سرشانه دستگاه')) {
+    return '/exercises/Machine_Shoulder_Press.gif';
+  }
+  if (text.includes('pec deck') || text.includes('chest fly') || text.includes('پروانه') || (text.includes('machine') && text.includes('fly'))) {
+    return '/exercises/Chest_Fly.gif';
+  }
+  if (text.includes('incline') && text.includes('fly')) {
+    return '/exercises/Incline_Dumbbell_Fly.gif';
+  }
+  if (text.includes('incline') && (text.includes('press') || text.includes('bench'))) {
+    return '/exercises/Incline_Chest_Press.gif';
+  }
+  if (text.includes('dumbbell bench') || (text.includes('dumbbell') && text.includes('bench'))) {
+    return '/exercises/Dumbbell_Bench_Press.gif';
+  }
+  if (text.includes('bent over') && text.includes('row')) {
+    return '/exercises/Bent_Over_Dumbbell_Row.gif';
+  }
 
-  if (text.includes('hammer')) return '/exercises/Dumbbell_Hammer_Curl.gif';
-  if (text.includes('preacher') || text.includes('ez')) return '/exercises/EZ_Bar_Preacher_Curl.gif';
-  if (text.includes('cable') && text.includes('curl')) return '/exercises/Cable_Bicep_Curl.gif';
-  if (text.includes('bicep') || text.includes('curl') || text.includes('arm')) return '/exercises/Dumbbell_Bicep_Curl.gif';
+  // MuscleWiki Dataset Direct Mappings
+  if (text.includes('incline') && (text.includes('bench') || text.includes('press'))) return '/musclewiki-gifs/male-barbell-incline-bench-press-front.gif';
+  if (text.includes('incline') && (text.includes('fly') || text.includes('flye'))) return '/musclewiki-gifs/male-dumbbell-incline-chest-flys-front.gif';
+  if (text.includes('diamond') && text.includes('push')) return '/musclewiki-gifs/male-bodyweight-diamond-pushup-front.gif';
+  if (text.includes('incline') && text.includes('push')) return '/musclewiki-gifs/male-bodyweight-incline-pushup-front.gif';
+  if (text.includes('pushup') || text.includes('push-up') || text.includes('push up')) return '/musclewiki-gifs/male-bodyweight-pushup-front.gif';
+  if (text.includes('bench') || text.includes('chest') || text.includes('press')) return '/musclewiki-gifs/male-barbell-bench-press-front_C2G7O8r.gif';
+  if (text.includes('dip')) return '/musclewiki-gifs/male-bodyweight-dips-front.gif';
 
-  if (text.includes('v_bar') || text.includes('v bar') || text.includes('v-bar')) return '/exercises/V_Bar_Triceps_Pushdown.gif';
-  if (text.includes('skullcrusher') || text.includes('extension') || text.includes('overhead')) return '/exercises/Lying_Triceps_Extension.gif';
-  if (text.includes('tricep') || text.includes('pushdown') || text.includes('dip')) return '/exercises/Triceps_Pushdown.gif';
+  if (text.includes('deadlift')) {
+    if (text.includes('sumo')) return '/musclewiki-gifs/male-barbell-sumo-deadlift-front_aeM2BqT.gif';
+    return '/musclewiki-gifs/male-barbell-deadlift-front.gif';
+  }
+  if (text.includes('chinup') || text.includes('chin up') || text.includes('chin-up')) return '/musclewiki-gifs/male-bodyweight-chinup-front.gif';
+  if (text.includes('pullup') || text.includes('pull up') || text.includes('pull-up')) return '/musclewiki-gifs/male-bodyweight-pullup-front.gif';
+  if (text.includes('unilateral') || (text.includes('dumbbell') && text.includes('row'))) return '/musclewiki-gifs/male-dumbbell-row-unilateral-front.gif';
+  if (text.includes('row')) return '/musclewiki-gifs/male-barbell-bent-over-row-front.gif';
 
-  if (text.includes('rear') || text.includes('delt')) return '/exercises/Bent_Over_Rear_Delt_Fly.gif';
-  if (text.includes('front') && text.includes('raise')) return '/exercises/Cable_Front_Raise.gif';
-  if (text.includes('machine') && text.includes('shoulder')) return '/exercises/Machine_Shoulder_Press.gif';
-  if (text.includes('shoulder') || text.includes('overhead') || text.includes('military') || text.includes('deltoid')) return '/exercises/Dumbbell_Shoulder_Press.gif';
+  if (text.includes('lateral') && text.includes('raise')) return '/musclewiki-gifs/male-dumbbell-lateral-raise-front.gif';
+  if (text.includes('upright') && text.includes('row')) return '/musclewiki-gifs/male-barbell-upright-row-front_3ROsKgm.gif';
+  if (text.includes('shrug')) {
+    if (text.includes('seated')) return '/musclewiki-gifs/male-dumbbell-seated-shrug-front.gif';
+    return '/musclewiki-gifs/male-dumbbell-shrug-front.gif';
+  }
+  if (text.includes('overhead') || text.includes('military') || text.includes('shoulder')) {
+    if (text.includes('dumbbell') || text.includes('seated')) return '/musclewiki-gifs/male-dumbbell-seated-overhead-press-front.gif';
+    return '/musclewiki-gifs/male-barbell-overhead-press-front_OJMNLxU.gif';
+  }
 
-  if (text.includes('reverse') && text.includes('pulldown')) return '/exercises/Reverse_Grip_Lat_Pulldown.gif';
-  if (text.includes('pulldown') || text.includes('lat')) return '/exercises/Lat_Pulldown.gif';
-  if (text.includes('row') || text.includes('back')) return '/exercises/Bent_Over_Dumbbell_Row.gif';
+  if (text.includes('hammer')) return '/musclewiki-gifs/male-dumbbell-hammer-curl-front_JbvhNLU.gif';
+  if (text.includes('reverse') && text.includes('curl')) return '/musclewiki-gifs/male-barbell-reverse-curl-front_ysdi82M.gif';
+  if (text.includes('bicep') || text.includes('curl')) {
+    if (text.includes('dumbbell')) return '/musclewiki-gifs/male-dumbbell-curl-front.gif';
+    return '/musclewiki-gifs/male-barbell-curl-front_uKPCb8P.gif';
+  }
+  if (text.includes('wrist') && text.includes('extension')) return '/musclewiki-gifs/male-dumbbell-wrist-extension-front.gif';
+  if (text.includes('wrist') && text.includes('curl')) return '/musclewiki-gifs/barbell-wristcurl-male-front.gif';
 
-  if (text.includes('extension') && text.includes('leg')) return '/exercises/Leg_Extension.gif';
-  if (text.includes('curl') && text.includes('leg')) return '/exercises/Lying_Leg_Curl.gif';
-  if (text.includes('calf') || text.includes('raise')) return '/exercises/Seated_Calf_Raise.gif';
-  if (text.includes('squat') || text.includes('lunge') || text.includes('leg') || text.includes('quad')) return '/exercises/Barbell_Squat.gif';
+  if (text.includes('skullcrusher')) return '/musclewiki-gifs/male-barbell-skullcrusher-front_qpHWUa8.gif';
+  if (text.includes('overhead') && text.includes('tricep')) return '/musclewiki-gifs/male-dumbbell-overhead-tricep-extension-front.gif';
+  if (text.includes('bench') && text.includes('dip')) return '/musclewiki-gifs/male-bodyweight-tricep-dips-front.gif';
+  if (text.includes('tricep') || text.includes('pushdown')) return '/musclewiki-gifs/male-barbell-laying-tricep-extensions-front.gif';
 
-  if (text.includes('back extension') || text.includes('hyperextension')) return '/exercises/Back_Extension.gif';
-  if (text.includes('crunch') || text.includes('ab') || text.includes('situp') || text.includes('core')) return '/exercises/Crunch.gif';
+  if (text.includes('goblet')) return '/musclewiki-gifs/male-dumbbell-goblet-squat-front.gif';
+  if (text.includes('bulgarian')) return '/musclewiki-gifs/male-bodyweight-bulgarian-split-squat-front.gif';
+  if (text.includes('lunge')) return '/musclewiki-gifs/male-bodyweight-forward-lunge-front.gif';
+  if (text.includes('glute') || text.includes('bridge')) return '/musclewiki-gifs/male-bodyweight-glute-bridge-front.gif';
+  if (text.includes('calf') || text.includes('calve')) {
+    if (text.includes('dumbbell')) return '/musclewiki-gifs/male-dumbbell-calf-raise-front.gif';
+    if (text.includes('barbell')) return '/musclewiki-gifs/male-barbell-calve-raise-front.gif';
+    return '/musclewiki-gifs/male-bodyweight-calve-raise-front.gif';
+  }
+  if (text.includes('squat')) {
+    if (text.includes('bodyweight') || text.includes('air')) return '/musclewiki-gifs/male-bodyweight-squat-front.gif';
+    return '/musclewiki-gifs/male-barbell-highbar-squat-front.gif';
+  }
+
+  if (text.includes('plank')) return '/musclewiki-gifs/male-bodyweight-forearm-plank-front.gif';
+  if (text.includes('leg raise')) return '/musclewiki-gifs/male-bodyweight-leg-raises-front.gif';
+  if (text.includes('russian') || text.includes('twist')) return '/musclewiki-gifs/male-dumbbell-russian-twist-front.gif';
+  if (text.includes('crunch') || text.includes('ab') || text.includes('situp')) return '/musclewiki-gifs/male-bodyweight-crunch-front.gif';
 
   const cat = (category || '').toLowerCase();
-  if (cat === 'chest') return '/exercises/Dumbbell_Bench_Press.gif';
-  if (cat === 'biceps') return '/exercises/Dumbbell_Bicep_Curl.gif';
-  if (cat === 'triceps') return '/exercises/Triceps_Pushdown.gif';
-  if (cat === 'shoulders') return '/exercises/Dumbbell_Shoulder_Press.gif';
-  if (cat === 'back') return '/exercises/Lat_Pulldown.gif';
-  if (cat === 'legs') return '/exercises/Barbell_Squat.gif';
-  if (cat === 'abs') return '/exercises/Crunch.gif';
+  if (cat === 'chest') return '/musclewiki-gifs/male-barbell-bench-press-front_C2G7O8r.gif';
+  if (cat === 'biceps') return '/musclewiki-gifs/male-barbell-curl-front_uKPCb8P.gif';
+  if (cat === 'triceps') return '/musclewiki-gifs/male-barbell-skullcrusher-front_qpHWUa8.gif';
+  if (cat === 'shoulders') return '/musclewiki-gifs/male-barbell-overhead-press-front_OJMNLxU.gif';
+  if (cat === 'back') return '/musclewiki-gifs/male-barbell-bent-over-row-front.gif';
+  if (cat === 'legs') return '/musclewiki-gifs/male-barbell-highbar-squat-front.gif';
+  if (cat === 'abs') return '/musclewiki-gifs/male-bodyweight-crunch-front.gif';
 
-  return '/exercises/Dumbbell_Bench_Press.gif';
+  return '/musclewiki-gifs/male-barbell-bench-press-front_C2G7O8r.gif';
 }
 
 export const ExerciseAnimation: React.FC<ExerciseAnimationProps> = ({
