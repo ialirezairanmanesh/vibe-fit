@@ -126,9 +126,10 @@ export default function App() {
     };
   }, [activeWorkoutState, activeUser?.id]);
 
-  // Background ticker for active workout session
+  // Background ticker only while minimized — fullscreen session owns its own clock
+  // (depending on activeWorkoutState object recreated the interval every second and raced set updates)
   useEffect(() => {
-    if (!activeWorkoutState || !activeUser?.id) return;
+    if (!activeWorkoutState || isViewingActiveWorkout || !activeUser?.id) return;
 
     const interval = setInterval(() => {
       setActiveWorkoutState((prev) => {
@@ -143,7 +144,7 @@ export default function App() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [activeWorkoutState, activeUser?.id]);
+  }, [Boolean(activeWorkoutState), isViewingActiveWorkout, activeUser?.id]);
 
   // Save routines state to local storage and IndexedDB for active user
   const saveRoutinesState = (newRoutines: RoutineDay[]) => {
@@ -470,7 +471,7 @@ export default function App() {
         onFinishWorkout={handleFinishWorkout}
         onMinimizeWorkout={handleMinimizeWorkout}
         onCancelWorkout={handleCancelWorkout}
-        onUpdateSessionState={(state) => setActiveWorkoutState(state)}
+        onUpdateSessionState={setActiveWorkoutState}
         onUpdateExerciseMedia={handleUpdateExerciseMedia}
       />
     );

@@ -56,27 +56,24 @@ export const RestTimer: React.FC<RestTimerProps> = ({
     }
   };
 
+  // ponytail: interval must NOT depend on secondsLeft — recreating every tick causes stutter
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
+    if (!isRunning) return;
 
-    if (isRunning && secondsLeft > 0) {
-      interval = setInterval(() => {
-        setSecondsLeft((prev) => {
-          if (prev <= 1) {
-            setIsRunning(false);
-            playChime();
-            if (onFinish) onFinish();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
+    const interval = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          setIsRunning(false);
+          playChime();
+          onFinish?.();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
 
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isRunning, secondsLeft, onFinish]);
+    return () => clearInterval(interval);
+  }, [isRunning, onFinish]);
 
   if (!isOpen) return null;
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { RoutineDay, WorkoutSession, ExerciseLog, SetLog, Exercise, ActiveWorkoutState } from '../types';
 import { RestTimer } from './RestTimer';
@@ -34,6 +34,37 @@ interface ActiveWorkoutSessionProps {
   onUpdateExerciseMedia?: (exerciseId: string, customMediaUrl: string | undefined) => void;
 }
 
+/** Isolated clock so the set list does not re-render every second. */
+function WorkoutElapsedClock({
+  initialSeconds,
+  elapsedRef
+}: {
+  initialSeconds: number;
+  elapsedRef: React.MutableRefObject<number>;
+}) {
+  const [elapsedSeconds, setElapsedSeconds] = useState(initialSeconds);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setElapsedSeconds((prev) => {
+        const next = prev + 1;
+        elapsedRef.current = next;
+        return next;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [elapsedRef]);
+
+  const m = Math.floor(elapsedSeconds / 60);
+  const s = elapsedSeconds % 60;
+  return (
+    <span className="flex items-center gap-1 text-emerald-400 font-mono">
+      <Clock className="w-3.5 h-3.5" />
+      {`${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`}
+    </span>
+  );
+}
+
 export const ActiveWorkoutSession: React.FC<ActiveWorkoutSessionProps> = ({
   routine,
   pastSessions,
@@ -44,7 +75,6 @@ export const ActiveWorkoutSession: React.FC<ActiveWorkoutSessionProps> = ({
   onUpdateSessionState,
   onUpdateExerciseMedia
 }) => {
-  const [elapsedSeconds, setElapsedSeconds] = useState<number>(initialState?.elapsedSeconds || 0);
   const [activeExerciseIndex, setActiveExerciseIndex] = useState<number>(initialState?.activeExerciseIndex || 0);
   const [exerciseLogs, setExerciseLogs] = useState<ExerciseLog[]>(initialState?.exerciseLogs || []);
   
@@ -58,12 +88,25 @@ export const ActiveWorkoutSession: React.FC<ActiveWorkoutSessionProps> = ({
   // Modal state
   const [selectedModalExercise, setSelectedModalExercise] = useState<Exercise | null>(null);
 
-  // Initialize exercise logs from routine if not present
+  const startTimeRef = useRef(initialState?.startTime || new Date().toISOString());
+  const elapsedRef = useRef(initialState?.elapsedSeconds || 0);
+  const exerciseLogsRef = useRef(exerciseLogs);
+  const activeExerciseIndexRef = useRef(activeExerciseIndex);
+  exerciseLogsRef.current = exerciseLogs;
+  activeExerciseIndexRef.current = activeExerciseIndex;
+
+  const buildSnapshot = (): ActiveWorkoutState => ({
+    routine,
+    startTime: startTimeRef.current,
+    elapsedSeconds: elapsedRef.current,
+    exerciseLogs: exerciseLogsRef.current,
+    activeExerciseIndex: activeExerciseIndexRef.current
+  });
+
+  // Init once on mount — re-applying parent initialState every tick caused weight/done jumps
   useEffect(() => {
     if (initialState && initialState.exerciseLogs.length > 0) {
-      setExerciseLogs(initialState.exerciseLogs);
-      setElapsedSeconds(initialState.elapsedSeconds);
-      setActiveExerciseIndex(initialState.activeExerciseIndex);
+      startTimeRef.current = initialState.startTime;
       return;
     }
 
@@ -115,20 +158,33 @@ export const ActiveWorkoutSession: React.FC<ActiveWorkoutSessionProps> = ({
     });
 
     setExerciseLogs(initialLogs);
-  }, [routine, pastSessions, initialState]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only init; parent sync must not reset local UI
+  }, []);
 
-  // Sync state changes to parent listener
+  // Sync sets/focus to parent — not every elapsed tick (avoids IndexedDB thrash + parent overwrite races)
   useEffect(() => {
-    if (onUpdateSessionState && exerciseLogs.length > 0) {
-      onUpdateSessionState({
-        routine,
-        startTime: initialState?.startTime || new Date().toISOString(),
-        elapsedSeconds,
-        exerciseLogs,
-        activeExerciseIndex
-      });
-    }
-  }, [exerciseLogs, elapsedSeconds, activeExerciseIndex]);
+    if (!onUpdateSessionState || exerciseLogs.length === 0) return;
+    onUpdateSessionState(buildSnapshot());
+  }, [exerciseLogs, activeExerciseIndex]);
+
+  // Periodic elapsed flush for crash recovery (parent ticker is off while viewing)
+  useEffect(() => {
+    if (!onUpdateSessionState) return;
+    const flush = () => {
+      if (exerciseLogsRef.current.length === 0) return;
+      onUpdateSessionState(buildSnapshot());
+    };
+    const interval = setInterval(flush, 10000);
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    document.addEventListener('visibilitychange', onHide);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onHide);
+      flush();
+    };
+  }, [onUpdateSessionState, routine]);
 
   // Toggle bodyweight vs weight mode for an exercise
   const toggleExerciseBodyweight = (exIdx: number) => {
@@ -147,29 +203,14 @@ export const ActiveWorkoutSession: React.FC<ActiveWorkoutSessionProps> = ({
     });
   };
 
-  // Workout duration ticker
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setElapsedSeconds((prev) => prev + 1);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
+  // Latest completed session for this routine (once per render, not per set row)
+  const previousRoutineSession = pastSessions
+    .filter((s) => s.routineId === routine.id && s.isCompleted)
+    .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())[0];
 
-  // Format active workout timer
-  const formatTime = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
-
-  // Helper to get previous performance hint string
   const getPreviousPerformance = (exerciseId: string, setIdx: number) => {
-    const prevSession = pastSessions
-      .filter((s) => s.routineId === routine.id && s.isCompleted)
-      .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())[0];
-
-    if (!prevSession) return null;
-    const prevEx = prevSession.exercises.find((e) => e.exerciseId === exerciseId);
+    if (!previousRoutineSession) return null;
+    const prevEx = previousRoutineSession.exercises.find((e) => e.exerciseId === exerciseId);
     if (!prevEx || !prevEx.sets[setIdx]) return null;
 
     const set = prevEx.sets[setIdx];
@@ -206,9 +247,19 @@ export const ActiveWorkoutSession: React.FC<ActiveWorkoutSessionProps> = ({
 
   // Quick weight adjuster buttons
   const adjustWeight = (exIdx: number, setIdx: number, delta: number) => {
-    const currentWeight = exerciseLogs[exIdx].sets[setIdx].actualWeight || 0;
-    const newWeight = Math.max(0, currentWeight + delta);
-    updateSet(exIdx, setIdx, 'actualWeight', newWeight);
+    setExerciseLogs((prev) => {
+      const updated = [...prev];
+      const targetEx = { ...updated[exIdx] };
+      const updatedSets = [...targetEx.sets];
+      const currentWeight = updatedSets[setIdx].actualWeight || 0;
+      updatedSets[setIdx] = {
+        ...updatedSets[setIdx],
+        actualWeight: Math.max(0, currentWeight + delta)
+      };
+      targetEx.sets = updatedSets;
+      updated[exIdx] = targetEx;
+      return updated;
+    });
   };
 
   // Add extra set
@@ -270,6 +321,7 @@ export const ActiveWorkoutSession: React.FC<ActiveWorkoutSessionProps> = ({
       origin: { y: 0.6 }
     });
 
+    const elapsedSeconds = elapsedRef.current;
     const finishedSession: WorkoutSession = {
       id: `session-${Date.now()}`,
       routineId: routine.id,
@@ -292,7 +344,7 @@ export const ActiveWorkoutSession: React.FC<ActiveWorkoutSessionProps> = ({
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
             <button
-              onClick={() => onMinimizeWorkout({ routine, startTime: initialState?.startTime || new Date().toISOString(), elapsedSeconds, exerciseLogs, activeExerciseIndex })}
+              onClick={() => onMinimizeWorkout(buildSnapshot())}
               className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition flex items-center gap-1 text-xs font-semibold"
               title="مینیمایز و بازگشت به برنامه (تمرین فعال می‌ماند)"
             >
@@ -311,10 +363,10 @@ export const ActiveWorkoutSession: React.FC<ActiveWorkoutSessionProps> = ({
             <div>
               <h1 className="text-sm sm:text-base font-bold text-slate-100 leading-tight">{routine.titleFa}</h1>
               <div className="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
-                <span className="flex items-center gap-1 text-emerald-400 font-mono">
-                  <Clock className="w-3.5 h-3.5" />
-                  {formatTime(elapsedSeconds)}
-                </span>
+                <WorkoutElapsedClock
+                  initialSeconds={initialState?.elapsedSeconds || 0}
+                  elapsedRef={elapsedRef}
+                />
                 <span>•</span>
                 <span className="text-amber-400 font-semibold">
                   {completedSetsCount} ست تکمیل شده
