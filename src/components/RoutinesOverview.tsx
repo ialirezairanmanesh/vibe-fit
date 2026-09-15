@@ -26,6 +26,7 @@ import {
 interface RoutinesOverviewProps {
   routines: RoutineDay[];
   pastSessions: WorkoutSession[];
+  isLoading?: boolean;
   onStartWorkout: (routine: RoutineDay) => void;
   onOpenTextImporter: () => void;
   onUpdateRoutines?: (newRoutines: RoutineDay[]) => void;
@@ -35,6 +36,7 @@ interface RoutinesOverviewProps {
 export const RoutinesOverview: React.FC<RoutinesOverviewProps> = ({
   routines,
   pastSessions,
+  isLoading = false,
   onStartWorkout,
   onOpenTextImporter,
   onUpdateRoutines,
@@ -297,7 +299,11 @@ export const RoutinesOverview: React.FC<RoutinesOverviewProps> = ({
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-[#D1FF00] animate-pulse"></span>
             <span className="text-xs font-bold text-[#D1FF00] tracking-wide uppercase">
-              {routines.length > 0 ? `برنامه تمرینی (${routines.length} روز)` : 'بدون برنامه پیش‌فرض'}
+              {isLoading
+                ? 'در حال بارگذاری...'
+                : routines.length > 0
+                  ? `برنامه تمرینی (${routines.length} روز)`
+                  : 'بدون برنامه پیش‌فرض'}
             </span>
           </div>
 
@@ -306,9 +312,11 @@ export const RoutinesOverview: React.FC<RoutinesOverviewProps> = ({
           </h2>
 
           <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed max-w-xl">
-            {routines.length > 0
-              ? 'برنامه تمرینی با پویانمایی حرکات بارگذاری شده است. می‌توانید هر زمان روی عنوان یا نام هر حرکت کلیک کنید و مستقیماً تغییرات دهید.'
-              : 'هیچ برنامه پیش‌فرضی وجود ندارد. می‌توانید برنامه اختصاصی مربی خود را از روی متن پیام پیست کنید یا روزهای تمرینی را دستی بسازید.'}
+            {isLoading
+              ? 'در حال خواندن برنامه تمرینی شما از حافظه دستگاه...'
+              : routines.length > 0
+                ? 'برنامه تمرینی با پویانمایی حرکات بارگذاری شده است. می‌توانید هر زمان روی عنوان یا نام هر حرکت کلیک کنید و مستقیماً تغییرات دهید.'
+                : 'هیچ برنامه پیش‌فرضی وجود ندارد. می‌توانید برنامه اختصاصی مربی خود را از روی متن پیام پیست کنید یا روزهای تمرینی را دستی بسازید.'}
           </p>
 
           <div className="pt-2 flex items-center gap-2.5 flex-wrap">
@@ -364,8 +372,18 @@ export const RoutinesOverview: React.FC<RoutinesOverviewProps> = ({
         </span>
       </div>
 
-      {/* Routine Day Cards List or Empty State */}
-      {routines.length === 0 ? (
+      {/* Loading / Empty / List */}
+      {isLoading ? (
+        <div className="bg-[#121212] border border-neutral-800 rounded-3xl p-8 sm:p-10 text-center space-y-4 shadow-xl">
+          <div className="w-12 h-12 mx-auto rounded-full border-2 border-neutral-700 border-t-[#D1FF00] animate-spin" />
+          <div className="space-y-1.5 max-w-md mx-auto">
+            <h4 className="text-base sm:text-lg font-bold text-neutral-100">در حال بارگذاری برنامه...</h4>
+            <p className="text-xs text-neutral-400 leading-relaxed">
+              لطفاً چند لحظه صبر کنید؛ داده‌های تمرینی در حال خواندن هستند.
+            </p>
+          </div>
+        </div>
+      ) : routines.length === 0 ? (
         <div className="bg-[#121212] border border-dashed border-neutral-800 rounded-3xl p-8 sm:p-10 text-center space-y-4 shadow-xl">
           <div className="w-16 h-16 mx-auto rounded-3xl bg-[#D1FF00]/10 border border-[#D1FF00]/25 text-[#D1FF00] flex items-center justify-center shadow-lg shadow-[#D1FF00]/10">
             <Layers className="w-8 h-8" />

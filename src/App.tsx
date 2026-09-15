@@ -39,6 +39,8 @@ export default function App() {
   const [activeWorkoutState, setActiveWorkoutState] = useState<ActiveWorkoutState | null>(null);
   const [isViewingActiveWorkout, setIsViewingActiveWorkout] = useState<boolean>(false);
   const [isTextImporterOpen, setIsTextImporterOpen] = useState<boolean>(false);
+  // Avoid flashing "هنوز برنامه نداری" before IndexedDB/server finishes
+  const [isBootstrapping, setIsBootstrapping] = useState(true);
 
   // Multi-User Profile State
   const [users, setUsers] = useState<UserProfile[]>([DEFAULT_USER]);
@@ -92,6 +94,8 @@ export default function App() {
       } catch (err) {
         console.error('Error loading persistent user data:', err);
         if (isMounted) setRoutines([]);
+      } finally {
+        if (isMounted) setIsBootstrapping(false);
       }
     }
 
@@ -165,33 +169,38 @@ export default function App() {
       return;
     }
 
-    // Flush current user's data before switching
-    if (activeUser?.id) {
-      await saveUserRoutinesPersistent(activeUser.id, routines);
-      await saveUserSessionsPersistent(activeUser.id, pastSessions);
-      await saveUserActiveWorkoutPersistent(activeUser.id, activeWorkoutState);
+    setIsBootstrapping(true);
+    try {
+      // Flush current user's data before switching
+      if (activeUser?.id) {
+        await saveUserRoutinesPersistent(activeUser.id, routines);
+        await saveUserSessionsPersistent(activeUser.id, pastSessions);
+        await saveUserActiveWorkoutPersistent(activeUser.id, activeWorkoutState);
+      }
+
+      const targetUser = users.find((u) => u.id === userId);
+      if (!targetUser) return;
+
+      await setActiveUserIdPersistent(userId);
+      setActiveUser(targetUser);
+
+      // Load new user's routines
+      const userRoutines = (await loadUserRoutinesPersistent(userId)) || [];
+      setRoutines(autoFixRoutinesMetadata(userRoutines));
+
+      // Load new user's sessions
+      const userSessions = await loadUserSessionsPersistent(userId);
+      setPastSessions(userSessions || []);
+
+      // Load new user's active workout
+      const userActiveWorkout = await loadUserActiveWorkoutPersistent(userId);
+      setActiveWorkoutState(userActiveWorkout);
+      setIsViewingActiveWorkout(false);
+
+      setIsUserModalOpen(false);
+    } finally {
+      setIsBootstrapping(false);
     }
-
-    const targetUser = users.find((u) => u.id === userId);
-    if (!targetUser) return;
-
-    await setActiveUserIdPersistent(userId);
-    setActiveUser(targetUser);
-
-    // Load new user's routines
-    const userRoutines = (await loadUserRoutinesPersistent(userId)) || [];
-    setRoutines(autoFixRoutinesMetadata(userRoutines));
-
-    // Load new user's sessions
-    const userSessions = await loadUserSessionsPersistent(userId);
-    setPastSessions(userSessions || []);
-
-    // Load new user's active workout
-    const userActiveWorkout = await loadUserActiveWorkoutPersistent(userId);
-    setActiveWorkoutState(userActiveWorkout);
-    setIsViewingActiveWorkout(false);
-
-    setIsUserModalOpen(false);
   };
 
   // Add New User Profile
@@ -543,6 +552,7 @@ export default function App() {
           <RoutinesOverview
             routines={routines}
             pastSessions={pastSessions}
+            isLoading={isBootstrapping}
             onStartWorkout={handleStartWorkout}
             onOpenTextImporter={() => setIsTextImporterOpen(true)}
             onUpdateRoutines={saveRoutinesState}
