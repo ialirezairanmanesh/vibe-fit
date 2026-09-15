@@ -11,6 +11,7 @@ import {
   saveUserSessionsPersistent,
   loadUserSessionsPersistent,
   saveUserActiveWorkoutPersistent,
+  flushUserActiveWorkoutPersistent,
   loadUserActiveWorkoutPersistent,
   deleteUserPersistent,
   exportAllUsersFullDeviceData,
@@ -101,46 +102,41 @@ export default function App() {
     };
   }, []);
 
-  // Sync active workout state to persistent DB for active user whenever updated
+  // Sync active workout to disk (debounced inside saveUserActiveWorkoutPersistent)
   useEffect(() => {
     if (!activeUser?.id) return;
 
     if (!activeWorkoutState) {
-      saveUserActiveWorkoutPersistent(activeUser.id, null);
+      void saveUserActiveWorkoutPersistent(activeUser.id, null);
       return;
     }
 
-    saveUserActiveWorkoutPersistent(activeUser.id, activeWorkoutState);
+    void saveUserActiveWorkoutPersistent(activeUser.id, activeWorkoutState);
 
-    // Save on tab exit or hide
     const handleFlushState = () => {
-      saveUserActiveWorkoutPersistent(activeUser.id, activeWorkoutState);
+      void flushUserActiveWorkoutPersistent();
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') handleFlushState();
     };
 
     window.addEventListener('beforeunload', handleFlushState);
-    document.addEventListener('visibilitychange', handleFlushState);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       window.removeEventListener('beforeunload', handleFlushState);
-      document.removeEventListener('visibilitychange', handleFlushState);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [activeWorkoutState, activeUser?.id]);
 
-  // Background ticker only while minimized — fullscreen session owns its own clock
-  // (depending on activeWorkoutState object recreated the interval every second and raced set updates)
+  // Background ticker only while minimized — no per-second disk write
   useEffect(() => {
     if (!activeWorkoutState || isViewingActiveWorkout || !activeUser?.id) return;
 
     const interval = setInterval(() => {
-      setActiveWorkoutState((prev) => {
-        if (!prev) return null;
-        const nextState = {
-          ...prev,
-          elapsedSeconds: prev.elapsedSeconds + 1
-        };
-        saveUserActiveWorkoutPersistent(activeUser.id, nextState);
-        return nextState;
-      });
+      setActiveWorkoutState((prev) =>
+        prev ? { ...prev, elapsedSeconds: prev.elapsedSeconds + 1 } : null
+      );
     }, 1000);
 
     return () => clearInterval(interval);

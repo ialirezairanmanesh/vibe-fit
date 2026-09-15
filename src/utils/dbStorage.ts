@@ -672,7 +672,11 @@ export async function loadUserSessionsPersistent(userId: string): Promise<Workou
   return sessions;
 }
 
-export async function saveUserActiveWorkoutPersistent(userId: string, state: ActiveWorkoutState | null): Promise<void> {
+// ponytail: debounce IDB/localStorage — +/- spam was writing disk every tap; flush on hide/unload
+let awSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let awPending: { userId: string; state: ActiveWorkoutState | null } | null = null;
+
+async function writeUserActiveWorkout(userId: string, state: ActiveWorkoutState | null): Promise<void> {
   const key = getUserActiveWorkoutKey(userId);
   if (state === null) {
     await setItemDB(key, null);
@@ -685,6 +689,35 @@ export async function saveUserActiveWorkoutPersistent(userId: string, state: Act
       localStorage.setItem(key, JSON.stringify(state));
     } catch {}
   }
+}
+
+export async function flushUserActiveWorkoutPersistent(): Promise<void> {
+  if (awSaveTimer) {
+    clearTimeout(awSaveTimer);
+    awSaveTimer = null;
+  }
+  if (!awPending) return;
+  const { userId, state } = awPending;
+  awPending = null;
+  await writeUserActiveWorkout(userId, state);
+}
+
+export async function saveUserActiveWorkoutPersistent(userId: string, state: ActiveWorkoutState | null): Promise<void> {
+  awPending = { userId, state };
+  if (state === null) {
+    if (awSaveTimer) {
+      clearTimeout(awSaveTimer);
+      awSaveTimer = null;
+    }
+    awPending = null;
+    await writeUserActiveWorkout(userId, null);
+    return;
+  }
+  if (awSaveTimer) clearTimeout(awSaveTimer);
+  awSaveTimer = setTimeout(() => {
+    awSaveTimer = null;
+    void flushUserActiveWorkoutPersistent();
+  }, 2000);
 }
 
 export async function loadUserActiveWorkoutPersistent(userId: string): Promise<ActiveWorkoutState | null> {

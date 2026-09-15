@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Timer, Play, Pause, RotateCcw, X, Plus, Minus, Volume2, Minimize2, Maximize2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Timer, Play, Pause, RotateCcw, X, Plus, Minus, Minimize2, Maximize2 } from 'lucide-react';
 
 interface RestTimerProps {
   initialSeconds: number;
@@ -18,15 +18,17 @@ export const RestTimer: React.FC<RestTimerProps> = ({
   const [totalSeconds, setTotalSeconds] = useState<number>(initialSeconds);
   const [isRunning, setIsRunning] = useState<boolean>(true);
   const [isMinimized, setIsMinimized] = useState<boolean>(false);
+  const onFinishRef = useRef(onFinish);
+  onFinishRef.current = onFinish;
 
   useEffect(() => {
+    if (!isOpen) return;
     setSecondsLeft(initialSeconds);
     setTotalSeconds(initialSeconds);
     setIsRunning(true);
     setIsMinimized(false);
   }, [initialSeconds, isOpen]);
 
-  // Web Audio synth for offline timer chime
   const playChime = () => {
     try {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -36,7 +38,7 @@ export const RestTimer: React.FC<RestTimerProps> = ({
       const gain = ctx.createGain();
 
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, ctx.currentTime); // A5 note
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.3);
 
       gain.gain.setValueAtTime(0.3, ctx.currentTime);
@@ -56,16 +58,16 @@ export const RestTimer: React.FC<RestTimerProps> = ({
     }
   };
 
-  // ponytail: interval must NOT depend on secondsLeft — recreating every tick causes stutter
+  // Only tick while open+running — closed modal must not setState every second
   useEffect(() => {
-    if (!isRunning) return;
+    if (!isOpen || !isRunning) return;
 
     const interval = setInterval(() => {
       setSecondsLeft((prev) => {
         if (prev <= 1) {
           setIsRunning(false);
           playChime();
-          onFinish?.();
+          onFinishRef.current?.();
           return 0;
         }
         return prev - 1;
@@ -73,7 +75,7 @@ export const RestTimer: React.FC<RestTimerProps> = ({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isRunning, onFinish]);
+  }, [isOpen, isRunning]);
 
   if (!isOpen) return null;
 
@@ -89,10 +91,10 @@ export const RestTimer: React.FC<RestTimerProps> = ({
 
   if (isMinimized) {
     return (
-      <div className="fixed bottom-20 right-4 left-4 z-50 md:left-auto md:right-6 md:w-80 bg-slate-900/95 backdrop-blur-lg border border-emerald-500/40 rounded-2xl shadow-2xl p-3 flex items-center justify-between transition-all duration-300">
+      <div className="fixed bottom-20 right-4 left-4 z-50 md:left-auto md:right-6 md:w-80 bg-slate-900/95 backdrop-blur-lg border border-emerald-500/40 rounded-2xl shadow-2xl p-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="relative w-10 h-10 flex items-center justify-center">
-            <svg className="w-10 h-10 transform -rotate-90">
+            <svg className="w-10 h-10 -rotate-90">
               <circle cx="20" cy="20" r="16" stroke="rgba(51,65,85,0.5)" strokeWidth="3" fill="transparent" />
               <circle
                 cx="20"
@@ -104,6 +106,7 @@ export const RestTimer: React.FC<RestTimerProps> = ({
                 strokeDashoffset={100 - progressPercent}
                 strokeLinecap="round"
                 fill="transparent"
+                className="transition-[stroke-dashoffset] duration-1000 linear"
               />
             </svg>
             <Timer className="w-4 h-4 text-emerald-400 absolute" />
@@ -116,20 +119,23 @@ export const RestTimer: React.FC<RestTimerProps> = ({
 
         <div className="flex items-center gap-1.5">
           <button
+            type="button"
             onClick={() => setIsRunning(!isRunning)}
-            className="p-2 rounded-xl bg-slate-800 text-slate-200 hover:bg-slate-700 active:scale-95 transition"
+            className="p-2 rounded-xl bg-slate-800 text-slate-200 hover:bg-slate-700 active:scale-95 transition-transform"
           >
             {isRunning ? <Pause className="w-4 h-4 text-amber-400" /> : <Play className="w-4 h-4 text-emerald-400" />}
           </button>
           <button
+            type="button"
             onClick={() => setIsMinimized(false)}
-            className="p-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 active:scale-95 transition"
+            className="p-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 active:scale-95 transition-transform"
           >
             <Maximize2 className="w-4 h-4" />
           </button>
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 rounded-xl bg-slate-800/80 text-slate-400 hover:text-red-400 active:scale-95 transition"
+            className="p-2 rounded-xl bg-slate-800/80 text-slate-400 hover:text-red-400 active:scale-95 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -139,44 +145,37 @@ export const RestTimer: React.FC<RestTimerProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
       <div className="relative w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 text-center space-y-6 overflow-hidden">
-        {/* Glow effect */}
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-emerald-400">
-            <Timer className="w-5 h-5 animate-pulse" />
+            <Timer className="w-5 h-5" />
             <span className="text-sm font-semibold">تایمر استراحت بین ست</span>
           </div>
           <div className="flex items-center gap-1">
             <button
+              type="button"
               onClick={() => setIsMinimized(true)}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
               title="کوچک‌سازی"
             >
               <Minimize2 className="w-4 h-4" />
             </button>
             <button
+              type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-800 transition"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* Big Radial Timer Display */}
         <div className="relative w-44 h-44 mx-auto flex items-center justify-center">
-          <svg className="w-full h-full transform -rotate-90">
-            <circle
-              cx="88"
-              cy="88"
-              r="78"
-              stroke="#1e293b"
-              strokeWidth="10"
-              fill="transparent"
-            />
+          <svg className="w-full h-full -rotate-90">
+            <circle cx="88" cy="88" r="78" stroke="#1e293b" strokeWidth="10" fill="transparent" />
             <circle
               cx="88"
               cy="88"
@@ -187,7 +186,7 @@ export const RestTimer: React.FC<RestTimerProps> = ({
               strokeDashoffset={490 - (490 * progressPercent) / 100}
               strokeLinecap="round"
               fill="transparent"
-              className="transition-all duration-500 ease-linear"
+              className="transition-[stroke-dashoffset] duration-1000 linear"
             />
           </svg>
           <div className="absolute flex flex-col items-center justify-center">
@@ -200,45 +199,48 @@ export const RestTimer: React.FC<RestTimerProps> = ({
           </div>
         </div>
 
-        {/* Quick Adjustment Pills */}
         <div className="flex items-center justify-center gap-2">
           <button
+            type="button"
             onClick={() => addTime(-10)}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 transition"
+            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 transition-colors"
           >
             <Minus className="w-3 h-3" /> ۱۰ ثانیه
           </button>
           <button
+            type="button"
             onClick={() => addTime(30)}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-900/40 hover:bg-emerald-900/70 border border-emerald-500/30 text-xs font-medium text-emerald-300 transition"
+            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-900/40 hover:bg-emerald-900/70 border border-emerald-500/30 text-xs font-medium text-emerald-300 transition-colors"
           >
             <Plus className="w-3 h-3" /> ۳۰ ثانیه
           </button>
           <button
+            type="button"
             onClick={() => addTime(60)}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 transition"
+            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 transition-colors"
           >
             <Plus className="w-3 h-3" /> ۶۰ ثانیه
           </button>
         </div>
 
-        {/* Play Pause Reset controls */}
         <div className="flex items-center justify-center gap-3 pt-2">
           <button
+            type="button"
             onClick={() => {
               setSecondsLeft(initialSeconds);
               setTotalSeconds(initialSeconds);
               setIsRunning(true);
             }}
-            className="p-3 rounded-2xl bg-slate-800 text-slate-300 hover:bg-slate-700 active:scale-95 transition"
+            className="p-3 rounded-2xl bg-slate-800 text-slate-300 hover:bg-slate-700 active:scale-95 transition-transform"
             title="بازنشانی"
           >
             <RotateCcw className="w-5 h-5" />
           </button>
 
           <button
+            type="button"
             onClick={() => setIsRunning(!isRunning)}
-            className="flex-1 py-3 px-6 rounded-2xl bg-emerald-500 hover:bg-emerald-600 active:scale-98 text-slate-950 font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition"
+            className="flex-1 py-3 px-6 rounded-2xl bg-emerald-500 hover:bg-emerald-600 active:scale-[0.98] text-slate-950 font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-transform"
           >
             {isRunning ? (
               <>
